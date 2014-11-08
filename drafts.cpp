@@ -13,19 +13,24 @@ using namespace std;
 //#include <locale.h>
 #include "boost/program_options.hpp" 
 
+#include <fstream>
 
 // OPZIONI
 namespace po = boost::program_options;
+
+po::variables_map vm;
 
 void parse_options(int ac, char* av[]){
 
 	po::options_description desc("Options");
 	desc.add_options()
 		("help", "print help message")
-		("depth", po::value<int>(), "set search depth")
-	;
+		("gui,g", "run GUI (default)")
+		("openings,o", "generate openings database (use with -d)")
+		("depth,d", po::value<int>()->default_value(11), "set search depth for cmdline computation")
+		;
 
-	po::variables_map vm;
+//	po::variables_map vm;
 	po::store(po::parse_command_line(ac,av,desc), vm);
 	po::notify(vm);
 
@@ -43,7 +48,7 @@ void parse_options(int ac, char* av[]){
 const int MAXSTACKSIZE = 30; //dimensione massima stack di mosse di sicurezza per evitare ripetizioni
 
 
-template <typename T>
+	template <typename T>
 string NToS ( T Number )
 {
 	stringstream ss;
@@ -59,7 +64,13 @@ char NToC (int n)
 
 //definizione del tipo di cella
 
-enum Cell {VOID,WHITE,BLACK,WQUEEN,BQUEEN};
+typedef char Cell;
+
+const char VOID=0;
+const char WHITE=1;
+const char BLACK=2;
+const char WQUEEN=3;
+const char BQUEEN=4;
 
 //def tipo di mossa
 
@@ -73,6 +84,7 @@ const char NO_MOVES = 33;
 const char PROPOSE_DRAW = 34;
 const char ACCEPT_DRAW = 35;
 const char NOT_DATABASE = 36;
+const char ENDMOVE_CARRIAGE = 37;
 
 
 
@@ -135,7 +147,7 @@ string moverep(Move m)
 	{
 		out = "";
 		for(Move::iterator it = m.begin(); it != m.end(); ++it) {
-    			out +=  cellrep(*it) + " ";}
+			out +=  cellrep(*it) + " ";}
 	};
 	return out + suffix;
 };
@@ -152,7 +164,7 @@ char parsepos(string tb)
 	cout << "parsing " << tb << "..." << endl;
 	int column = (tb[0]-(int)'A')/2;
 	int row = 8-(int(tb[1]) - (int)'1'+1);
-	
+
 	return (char)(4*row + column);
 
 }
@@ -183,113 +195,113 @@ const float INFTY = numeric_limits<float>::max();
 const char NULLP[2] = {99,99};
 
 const char FORW[32][2] = {
-{99,99}, //0
-{99,99}, //1
-{99,99}, //2
-{99,99}, //3
-{0,99}, //4
-{0,1}, //5
-{1,2}, //6
-{2,3}, //7
-{4,5}, //8
-{5,6}, //9
-{6,7}, //10
-{7,99}, //11
-{8,99}, //12
-{8,9}, //13
-{9,10}, //14
-{10,11}, //15
-{12,13}, //16
-{13,14}, //17
-{14,15}, //18
-{15,99}, //19
-{16,99}, //20
-{16,17}, //21
-{17,18}, //22
-{18,19}, //23
-{20,21}, //24
-{21,22}, //25
-{22,23}, //26
-{23,99}, //27
-{24,99}, //28
-{24,25}, //29
-{25,26}, //30
-{26,27} //31
+	{99,99}, //0
+	{99,99}, //1
+	{99,99}, //2
+	{99,99}, //3
+	{0,99}, //4
+	{0,1}, //5
+	{1,2}, //6
+	{2,3}, //7
+	{4,5}, //8
+	{5,6}, //9
+	{6,7}, //10
+	{7,99}, //11
+	{8,99}, //12
+	{8,9}, //13
+	{9,10}, //14
+	{10,11}, //15
+	{12,13}, //16
+	{13,14}, //17
+	{14,15}, //18
+	{15,99}, //19
+	{16,99}, //20
+	{16,17}, //21
+	{17,18}, //22
+	{18,19}, //23
+	{20,21}, //24
+	{21,22}, //25
+	{22,23}, //26
+	{23,99}, //27
+	{24,99}, //28
+	{24,25}, //29
+	{25,26}, //30
+	{26,27} //31
 };
 
 //lookup table per gli spostamenti in ogni direzione di uno
 
 const char KING[32][4] = {
-{99,99,5,4}, //0
-{99,99,6,5}, //1
-{99,99,7,6}, //2
-{99,99,7,99}, //3
-{0,99,8,99}, //4
-{0,1,9,8}, //5
-{1,2,10,9}, //6
-{2,3,11,10}, //7
-{4,5,13,12}, //8
-{5,6,14,13}, //9
-{6,7,15,14}, //10
-{7,99,15,99}, //11
-{8,99,16,99}, //12
-{8,9,17,16}, //13
-{9,10,18,17}, //14
-{10,11,19,18}, //15
-{12,13,21,20}, //16
-{13,14,22,21}, //17
-{14,15,23,22}, //18
-{15,99,23,99}, //19
-{16,99,24,99}, //20
-{16,17,25,24}, //21
-{17,18,26,25}, //22
-{18,19,27,26}, //23
-{20,21,29,28}, //24
-{21,22,30,29}, //25
-{22,23,31,30}, //26
-{23,99,31,99}, //27
-{24,99,99,99}, //28
-{24,25,99,99}, //29
-{25,26,99,99}, //30
-{26,27,99,99} //31
+	{99,99,5,4}, //0
+	{99,99,6,5}, //1
+	{99,99,7,6}, //2
+	{99,99,7,99}, //3
+	{0,99,8,99}, //4
+	{0,1,9,8}, //5
+	{1,2,10,9}, //6
+	{2,3,11,10}, //7
+	{4,5,13,12}, //8
+	{5,6,14,13}, //9
+	{6,7,15,14}, //10
+	{7,99,15,99}, //11
+	{8,99,16,99}, //12
+	{8,9,17,16}, //13
+	{9,10,18,17}, //14
+	{10,11,19,18}, //15
+	{12,13,21,20}, //16
+	{13,14,22,21}, //17
+	{14,15,23,22}, //18
+	{15,99,23,99}, //19
+	{16,99,24,99}, //20
+	{16,17,25,24}, //21
+	{17,18,26,25}, //22
+	{18,19,27,26}, //23
+	{20,21,29,28}, //24
+	{21,22,30,29}, //25
+	{22,23,31,30}, //26
+	{23,99,31,99}, //27
+	{24,99,99,99}, //28
+	{24,25,99,99}, //29
+	{25,26,99,99}, //30
+	{26,27,99,99} //31
 };
 
 
 //lookup table per i salti (primi due: pedina)
 
 const char SJUMP[32][4] = {
-{99,99,99,9},	 //0
-{99,99,8,10},	 //1
-{99,99,9,11},	 //2
-{99,99,10,99},	 //3
-{99,99,99,13},	 //4
-{99,99,12,14},	 //5
-{99,99,13,15},	 //6
-{99,99,14,99},	 //7
-{99,1,99,17},	 //8
-{0,2,16,18},	 //9
-{1,3,17,19},	 //10
-{2,99,18,99},	 //11
-{99,5,99,21},	 //12
-{4,6,20,22},	 //13
-{5,7,21,23},	 //14
-{6,99,22,99},	 //15
-{99,9,99,25},	 //16
-{8,10,24,26},	 //17
-{9,11,25,27},	 //18
-{10,99,26,99},	 //19
-{99,13,99,29},	 //20
-{12,14,28,30},	 //21
-{13,15,29,31},	 //22
-{14,99,30,99},	 //23
-{99,17,99,99},	 //24
-{16,18,99,99},	 //25
-{17,19,99,99},	 //26
-{18,99,99,99},	 //27
-{99,21,99,99},	 //28
-{20,22,99,99},	 //29
-{21,23,99,99},	 //30
-{22,99,99,99}	 //31
+	{99,99,99,9},	 //0
+	{99,99,8,10},	 //1
+	{99,99,9,11},	 //2
+	{99,99,10,99},	 //3
+	{99,99,99,13},	 //4
+	{99,99,12,14},	 //5
+	{99,99,13,15},	 //6
+	{99,99,14,99},	 //7
+	{99,1,99,17},	 //8
+	{0,2,16,18},	 //9
+	{1,3,17,19},	 //10
+	{2,99,18,99},	 //11
+	{99,5,99,21},	 //12
+	{4,6,20,22},	 //13
+	{5,7,21,23},	 //14
+	{6,99,22,99},	 //15
+	{99,9,99,25},	 //16
+	{8,10,24,26},	 //17
+	{9,11,25,27},	 //18
+	{10,99,26,99},	 //19
+	{99,13,99,29},	 //20
+	{12,14,28,30},	 //21
+	{13,15,29,31},	 //22
+	{14,99,30,99},	 //23
+	{99,17,99,99},	 //24
+	{16,18,99,99},	 //25
+	{17,19,99,99},	 //26
+	{18,99,99,99},	 //27
+	{99,21,99,99},	 //28
+	{20,22,99,99},	 //29
+	{21,23,99,99},	 //30
+	{22,99,99,99}	 //31
 
 };
 
@@ -342,7 +354,7 @@ void State::copyfrom(State s)
 }
 
 State::State() {
-	
+
 };
 
 void State::setup() {
@@ -367,22 +379,22 @@ void State::drawascii() {
 	cout << " A B C D E F G H" << endl;	
 	cout << "|-|-|-|-|-|-|-|-|" << endl;
 	for (int j=0; j<8; j++)
+	{
+		if (not (j%2))
+			cout << "| ";
+		for (int i=0; i<4; i++)
 		{
-			if (not (j%2))
+			cout << "|" << cellascii(data[4*j+i]);
+			if (i<3)
 				cout << "| ";
-			for (int i=0; i<4; i++)
-				{
-					cout << "|" << cellascii(data[4*j+i]);
-					if (i<3)
-						cout << "| ";
-				}
-			if ( (j%2))
-				cout << "| |";
-			else
-				cout << "|";
-			cout << 8-j << endl;
-			cout << "|-|-|-|-|-|-|-|-|" << endl;
-		};
+		}
+		if ( (j%2))
+			cout << "| |";
+		else
+			cout << "|";
+		cout << 8-j << endl;
+		cout << "|-|-|-|-|-|-|-|-|" << endl;
+	};
 };
 
 void State::apply_move(Move m)
@@ -390,7 +402,7 @@ void State::apply_move(Move m)
 	turn++;
 	if(draw and m[0] == ACCEPT_DRAW)
 		return;
-	
+
 
 	draw = false;	
 
@@ -399,17 +411,17 @@ void State::apply_move(Move m)
 		draw=true;
 		m.pop_back();
 	}
-	
+
 
 	if(m[0] >= 32)
 		return;	
 
-//	if(m.size()<=1)
-//		{return;}
+	//	if(m.size()<=1)
+	//		{return;}
 
-//	for (Move::iterator it = m.begin(); it != m.end(); it++)
-//		if ((*it) >= 32)
-//		{cout << int(*it) << endl; exit(1);};
+	//	for (Move::iterator it = m.begin(); it != m.end(); it++)
+	//		if ((*it) >= 32)
+	//		{cout << int(*it) << endl; exit(1);};
 	if((m.size() > 2) or (abs(m[0]-m[1]) >=6)) //questi sono i salti
 	{
 		//clear stack
@@ -435,8 +447,8 @@ void State::apply_move(Move m)
 			movestack = vector<Move>();
 		else
 		{
-		//	Cell *k = find(data,data+32,WQUEEN);
-		//	if (k != data+32)
+			//	Cell *k = find(data,data+32,WQUEEN);
+			//	if (k != data+32)
 			movestack.push_back(m);
 		}
 
@@ -507,7 +519,7 @@ bool isbeatable(int nlen, char other)
 		return true;
 
 	return false;
-		
+
 }
 
 
@@ -518,7 +530,7 @@ struct jumppos {
 
 
 vector<Move> State::raw_movelist()
-	{
+{
 
 	vector<Move> outlist;
 
@@ -527,10 +539,10 @@ vector<Move> State::raw_movelist()
 	{
 		if ((data[i] == WHITE) or (data[i] == WQUEEN))
 		{
-		//	cout << "PROCESSING CELL" << cellrep(i) << endl;
+			//	cout << "PROCESSING CELL" << cellrep(i) << endl;
 			//un numero utile: 2 per le pedine, 4 per le dame
 			int nlen = 2*(data[i]==WHITE)+4*(data[i]==WQUEEN);
-		//	cout << "nlen = "<< nlen << endl;
+			//	cout << "nlen = "<< nlen << endl;
 
 			//check preliminare per risparmiare
 			bool tuttoinutile = true;
@@ -538,22 +550,22 @@ vector<Move> State::raw_movelist()
 			{
 				if(nlen==2)
 					if ((data[FORW[i][j]] == BLACK) or (data[FORW[i][j]] == BQUEEN))
-						{tuttoinutile = false; break;}
+					{tuttoinutile = false; break;}
 				if (nlen==4)
 					if ((data[KING[i][j]] == BLACK) or (data[KING[i][j]]== BQUEEN))
-						{tuttoinutile = false;break;}
+					{tuttoinutile = false;break;}
 				if ((nlen!=2) and (nlen!=4))
 					cout << "WARNING: unvalid piece has leaked into preliminary check" << endl;
 			}
 			if (tuttoinutile)
 				continue;
 
-		//	cout << "check preliminare passato" << endl;
+			//	cout << "check preliminare passato" << endl;
 
 
 			//qui si dovrebbe pensare a generare i salti per la postazione i
-			
-		//	cout << "preparazione albero di iterazione" << endl;
+
+			//	cout << "preparazione albero di iterazione" << endl;
 
 			//preparo l'albero con il tronco
 			tree<jumppos> jtree;
@@ -564,8 +576,8 @@ vector<Move> State::raw_movelist()
 			startpos.cell = i;
 			startpos.done = false;
 			beg = jtree.insert(top,startpos);
-			
-		//	cout << "pronto" << endl;
+
+			//	cout << "pronto" << endl;
 
 
 
@@ -573,7 +585,7 @@ vector<Move> State::raw_movelist()
 
 			for(int control=0; control<50; control++)//contatore di controllo per evitare loop infiniti
 			{
-		//		cout << "CICLO ITERATIVO." << endl;
+				//		cout << "CICLO ITERATIVO." << endl;
 
 				bool exitv = false;
 
@@ -584,7 +596,7 @@ vector<Move> State::raw_movelist()
 				{
 					if (not (leaf->done))
 						break;
-					
+
 					leaf++;
 
 					if(leaf==endleaf)
@@ -592,26 +604,26 @@ vector<Move> State::raw_movelist()
 						exitv = true;
 						break;
 					}
-					
+
 				}
-				
+
 
 				//esci se non ci sono più foglie da processare
 				if (exitv)
 				{
-		//			cout << "fine foglie non fatte." << endl;
+					//			cout << "fine foglie non fatte." << endl;
 					break;
 				}
 
-				
-		//		cout << "prima foglia non fatta: " << cellrep(leaf->cell) << endl;
+
+				//		cout << "prima foglia non fatta: " << cellrep(leaf->cell) << endl;
 
 				//genera le destinazioni successive e aggiungi all'albero
 				char s = (leaf->cell);
 				int destcounter = 0;
 
 				//ma prima, prepara una lista di pedine gia' mangiate
-				
+
 				tree<jumppos>::iterator track = leaf;
 				vector<char> blacklist;
 				while(track!=beg)
@@ -619,9 +631,9 @@ vector<Move> State::raw_movelist()
 					char t = track->cell;
 					char c = jtree.parent(track)->cell;
 					blacklist.push_back((c + t + 1 - (t/4)%2)/2);
-					
+
 					track = jtree.parent(track);
-					
+
 				}
 
 
@@ -630,14 +642,14 @@ vector<Move> State::raw_movelist()
 					char dest = SJUMP[s][d];
 					if (dest == 99)
 						continue;
-		//			cout << "considering destination" << int(dest) << endl;
-								
+					//			cout << "considering destination" << int(dest) << endl;
+
 					char eventualjump = (s + dest + 1 - (s/4)%2)/2;
 
 					if (find(blacklist.begin(), blacklist.end(), eventualjump)!=blacklist.end())//ignora la mangiata se e' nella blacklist
 						continue;
-					
-					
+
+
 					//se il salto c'e', aggiungi all'albero
 					if ((data[dest] == VOID) and isbeatable(nlen,data[ (s+dest+1-(s/4)%2)/2 ]))
 					{
@@ -646,34 +658,34 @@ vector<Move> State::raw_movelist()
 						ne.done = false;
 						jtree.append_child(leaf,ne);
 						destcounter ++;
-		//				cout << "destination added." << endl;
+						//				cout << "destination added." << endl;
 					}
 				}
 
 				(*leaf).done = true;
 
-		//		cout << "dalla cella" << cellrep(leaf->cell) << " abbiamo" << destcounter << " destinazioni." << endl;
+				//		cout << "dalla cella" << cellrep(leaf->cell) << " abbiamo" << destcounter << " destinazioni." << endl;
 
 				if (control == 49)
 					cout << "WARNING: reached critical control counter in tree generation loop." << endl;
 
 			};
 
-		//	cout << "albero costruito." << endl;
+			//	cout << "albero costruito." << endl;
 
 			//ricostruisci i percorsi a partire dalle foglie e aggiungili alle mosse
-		
+
 			leaf = jtree.begin_leaf();
 			endleaf = jtree.end_leaf();
-			
+
 			while(leaf != endleaf)
 			{
-		//		cout << "* ricostruisco dalla cella" << cellrep(leaf->cell) << endl;
+				//		cout << "* ricostruisco dalla cella" << cellrep(leaf->cell) << endl;
 				Move m;
 				tree<jumppos>::iterator backtrans = leaf;
 				while (true)				
 				{
-		//			cout << i << ": " << cellrep(backtrans->cell) << endl;
+					//			cout << i << ": " << cellrep(backtrans->cell) << endl;
 					m.insert(m.begin(), backtrans->cell );
 					if (backtrans != beg)
 						backtrans = jtree.parent(backtrans);
@@ -684,12 +696,12 @@ vector<Move> State::raw_movelist()
 					outlist.push_back(m);
 				leaf++;
 			}
-			
+
 
 
 		}
 	}
-	
+
 	//se c'e' almeno un salto, niente mosse normali
 	if (outlist.size()>0)
 		return outlist;
@@ -702,17 +714,17 @@ vector<Move> State::raw_movelist()
 		counter = 0;
 		if (data[i] == WHITE) //if there's a white piece
 		{
-		for(int k=0;k<2;k++)
-			if ((FORW[i][k] != 99) && (data[FORW[i][k]] == VOID))
-			{
-				Move m = mpair(i,FORW[i][k]);
-		
-		
-				outlist.push_back(m);
-				counter ++;
-			}
-			
-			
+			for(int k=0;k<2;k++)
+				if ((FORW[i][k] != 99) && (data[FORW[i][k]] == VOID))
+				{
+					Move m = mpair(i,FORW[i][k]);
+
+
+					outlist.push_back(m);
+					counter ++;
+				}
+
+
 		}
 		if (data[i] == WQUEEN) //if there's a white king
 		{
@@ -724,7 +736,7 @@ vector<Move> State::raw_movelist()
 				{
 					Move m = mpair(i,KING[i][j]);
 
-					
+
 					//cerca mossa nello stack
 					int reps = count(movestack.begin(), movestack.end(), m);
 					if (reps > 1)
@@ -737,11 +749,11 @@ vector<Move> State::raw_movelist()
 				}
 			}
 		}
-		
-		
+
+
 	};
 
-	
+
 	if(draw)
 	{
 		outlist.push_back(Move(1,ACCEPT_DRAW));
@@ -754,18 +766,20 @@ vector<Move> State::raw_movelist()
 
 //----DB IN/OUT--------
 
+const char* DBFILE = "db/database";
+
 class compare_boards {
 	public:
 		bool operator()(Cell* x, Cell* y) 
-	{
-		for (int i=0;i<32;i++)
 		{
-			if(x[i]<y[i])
-				return true;
-			if(x[i]>y[i])
-				return false;
+			for (int i=0;i<32;i++)
+			{
+				if(x[i]<y[i])
+					return true;
+				if(x[i]>y[i])
+					return false;
+			}
 		}
-	}
 
 };
 
@@ -777,12 +791,14 @@ struct Dbentry {
 typedef map<Cell*, Dbentry, compare_boards> dbtype;
 
 class Database {
-	private:
-		dbtype db;
 	public:
+		dbtype db;
 		Database();
 		strategy query(State s);
-		void insert(State s, char depth, strategy strat);
+		void insert(State s, char depth, strategy strat, bool force);
+		void push();
+		void pull();
+		void generate_openings(int depth);
 
 } database;
 
@@ -802,14 +818,18 @@ strategy Database::query(State s)
 	}
 
 	return outs;
-	
+
 };
 
-void Database::insert(State s, char depth, strategy strat)
+void Database::insert(State s, char depth, strategy strat, bool force=false)
 {
 	dbtype::iterator it = db.find(s.data);
-	if((it == db.end()) or ((*it).second.depth < depth))
+	if((it == db.end()) or (force or  ((*it).second.depth < depth)))
 	{
+
+		if(it != db.end())
+			db.erase(it);	
+
 		Dbentry n;
 		n.depth = depth;
 		n.strat = strat;
@@ -819,6 +839,10 @@ void Database::insert(State s, char depth, strategy strat)
 			o[i] = s.data[i];
 
 		db[o] = n;
+	}
+	else
+	{
+//		cout << "WARNING: insert aborted." << endl;
 	}
 };
 
@@ -835,6 +859,84 @@ Database::Database() //basic db setup
 	oldfs.optimal = oldf;
 	insert(s,99,oldfs);
 
+}
+
+
+
+void Database::push()
+{
+	ofstream ofile;
+	ofile.open(DBFILE, ios::out | ios::trunc | ios::binary);
+
+	dbtype::iterator it;
+
+	char buffer[16];
+
+	for(it = db.begin(); it != db.end(); it++)
+	{
+		//Il file e' diviso in settori da 64 byte.
+		//I primi 32 byte sono allocati per la board (e' uno spreco, ma e' veloce)
+		ofile.write( (*it).first, 32);
+		
+		//Poi 16 byte alla mossa ottimale
+		for (int i=0; i<16; i++)
+			buffer[i] = ENDMOVE_CARRIAGE;
+		for (int i=0; i<(*it).second.strat.optimal.size(); i++)
+			buffer[i] = (*it).second.strat.optimal[i];
+		ofile.write(buffer,16);
+
+		//Infine 16 byte per ora vuoti
+		ofile.write(buffer,16);
+
+		 
+	}
+
+	ofile.close();
+
+}
+
+void Database::pull()
+{
+	ifstream ifile;
+	ifile.open(DBFILE, ios::in | ios::binary);
+	
+	db.clear();
+
+	char buffer[64];
+
+	while(true)
+	{
+		ifile.read(buffer,64);
+		if(not ifile)
+		{
+			if (ifile.gcount()>0)
+				cout << "WARNING: STRAY CHARS " << ifile.gcount() << endl;
+			break;
+		}
+		Cell* br = new Cell [32];
+		
+		for(int i=0; i<32; i++)
+			br[i] = buffer[i];
+
+		Move m;
+		for (int j=0; j<16; j++)
+		{
+			if (buffer[32+j]==ENDMOVE_CARRIAGE)
+				break;
+			m.push_back(buffer[32+j]);
+		}
+
+		strategy ott;
+		ott.value=99;
+		ott.optimal = m;
+		Dbentry n;
+		n.strat = ott;
+		n.depth = 11;		
+
+		db[br] = n;
+	}
+		
+	ifile.close();
 }
 
 //-------MINIMAX-------
@@ -882,7 +984,7 @@ float State::value_function()
 				return -INFTY;
 			else
 				return 0;
-			
+
 	}
 
 	float val = 0;
@@ -914,11 +1016,15 @@ float State::value_function()
 
 }
 
-enum Modal {M_DEFAULT,M_GRAPH};
+
+const unsigned char	M_ROOT=0x01;
+const unsigned char	M_GRAPH=0x02;
+
+
 
 //la funzione ritorna il punteggio stimato sempre per il giocatore turn!
 
-strategy compute( State original, bool turn, int depth, Modal mode=M_DEFAULT, float alphabetalim=-INFTY)
+strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROOT, float alphabetalim=-INFTY)
 {
 	//cout << "depth: " << depth << endl;
 	//la board e' flippata da dopo l'ingresso a dopo la generazione delle mosse
@@ -939,18 +1045,20 @@ strategy compute( State original, bool turn, int depth, Modal mode=M_DEFAULT, fl
 
 	//ricerca nel database
 
-	strategy res = database.query(original);
-	if(not (res.optimal[0] == NOT_DATABASE))
+	if((mode & M_ROOT)==M_ROOT)
 	{
-		if (mode == M_GRAPH)
+		strategy res = database.query(original);
+		if(not (res.optimal[0] == NOT_DATABASE))
 		{
-			move(1,20);
-			addstr(("Found in DB. ("+valrep(res.value)+")").c_str());
+			if ((mode & M_GRAPH)==M_GRAPH)
+			{
+				move(1,20);
+				addstr(("Found in DB. ("+valrep(res.value)+")").c_str());
+			}
+			return res;
 		}
-		return res;
-	}
-	
 
+	};
 
 	//generazione movestack
 	vector<Move> ls = original.raw_movelist();
@@ -967,7 +1075,7 @@ strategy compute( State original, bool turn, int depth, Modal mode=M_DEFAULT, fl
 			s.value = 0; //lo stallo ha punteggio 0
 			s.optimal.insert(s.optimal.begin(),  NO_MOVES);
 		}
-			
+
 		return s;
 	}
 
@@ -981,7 +1089,7 @@ strategy compute( State original, bool turn, int depth, Modal mode=M_DEFAULT, fl
 	points = new float[ls.size()];
 
 	//preparazione display mosse
-	if(mode == M_GRAPH)
+	if((mode & M_GRAPH) == M_GRAPH)
 	{
 		for (int i=0; i<20; i++){
 			move(1+i,20);
@@ -998,14 +1106,14 @@ strategy compute( State original, bool turn, int depth, Modal mode=M_DEFAULT, fl
 
 	for(int i=0; i<ls.size(); i++)
 	{
-	//	cout << "branch " << i << ": ";
-	//	printmove(ls[i]);
+		//	cout << "branch " << i << ": ";
+		//	printmove(ls[i]);
 		if(ls[i][0] == ACCEPT_DRAW)
 		{
 			int countpiec = 0;
 			for (int o=0; o<32; o++)
 				countpiec += (original.data[o] != VOID);
-					
+
 			points[i] = 50*(countpiec>8);
 		}
 		else
@@ -1019,7 +1127,7 @@ strategy compute( State original, bool turn, int depth, Modal mode=M_DEFAULT, fl
 				tmp.flip();
 
 
-			strategy strat = compute(tmp, not turn, depth-1, M_DEFAULT,-abcounter);
+			strategy strat = compute(tmp, not turn, depth-1, 0 ,-abcounter);
 			points[i] = strat.value;
 
 			//update contatore di alfa-beta
@@ -1032,13 +1140,13 @@ strategy compute( State original, bool turn, int depth, Modal mode=M_DEFAULT, fl
 		}
 
 		//update display
-		if(mode == M_GRAPH)
+		if((mode & M_GRAPH) == M_GRAPH)
 		{
 			move(1+i,20);
 			addstr(valrep(-points[i]).c_str());
 			refresh();
 		}
-		
+
 	}
 
 
@@ -1063,7 +1171,7 @@ strategy compute( State original, bool turn, int depth, Modal mode=M_DEFAULT, fl
 
 	delete[] points;
 
-//	cout << "points: " << out.value << endl;
+	//	cout << "points: " << out.value << endl;
 
 	//se si perde in ogni caso, la mossa è arrendersi
 	if (out.value <= -INFTY)
@@ -1078,7 +1186,7 @@ strategy compute( State original, bool turn, int depth, Modal mode=M_DEFAULT, fl
 	{
 		if ((original.data[i] == WHITE))
 		{ dcountw = -1; break;}
-		
+
 		if(original.data[i] == WQUEEN)
 			dcountw ++;
 		if(original.data[i] == BQUEEN)
@@ -1090,7 +1198,7 @@ strategy compute( State original, bool turn, int depth, Modal mode=M_DEFAULT, fl
 
 		if ((dcountw <= 3) and (dcountw<=dcountb))
 			adddraw = true;
-	
+
 		if ((dcountw <= 3) and (dcountb <= 3) and (abs(dcountw - dcountb)<=1))
 			if (out.value <= 0) //a meno che non sia sicuro di passare in vantaggio
 				adddraw = true;
@@ -1166,7 +1274,7 @@ void compvscomp(int wdepth, int bdepth)
 
 		s.apply_move(os.optimal);
 		s.flip();
-		
+
 	}
 
 	s.drawascii();
@@ -1190,10 +1298,10 @@ struct Message{
 class message_holder{
 	deque<Message> queue;
 	public:
-		void message(string m);
-		void message(string m, int col);
+	void message(string m);
+	void message(string m, int col);
 	private:
-		void drawm();
+	void drawm();
 } mes;
 
 void message_holder::drawm()
@@ -1238,9 +1346,9 @@ class GUI
 	int depth;	
 
 	public:
-		bool flipcolor;
-		void runGUI();
-		void drawback();
+	bool flipcolor;
+	void runGUI();
+	void drawback();
 } gui;
 
 
@@ -1273,7 +1381,7 @@ void display(State s)
 {
 	int startx = 4;
 	int starty = 3;
-	
+
 	attron(COLOR_PAIR(2));
 	for(int j=0; j<64; j++)
 	{
@@ -1287,46 +1395,46 @@ void display(State s)
 		move(starty + i/4, startx + 2*(i%4) + ((i/4)+1)%2 );
 		switch(s.data[i])
 		{
-		case VOID:
-		
-			attron(COLOR_PAIR(1));
-			addch(' ');
-			attroff(COLOR_PAIR(1));
-			break;
+			case VOID:
 
-		case WHITE:	
-			attron(COLOR_PAIR(gui.flipcolor));
-			addch('=');
-			attroff(COLOR_PAIR(gui.flipcolor));
-			break;
-		case WQUEEN:	
-			attron(COLOR_PAIR(gui.flipcolor));
-			addch('#');
-			attroff(COLOR_PAIR(gui.flipcolor));
-			break;
-		case BLACK:	
-			attron(COLOR_PAIR(not gui.flipcolor));
-			addch('=');
-			attroff(COLOR_PAIR(not gui.flipcolor));
-			break;
-		case BQUEEN:	
-			attron(COLOR_PAIR(not gui.flipcolor));
-			addch('#');
-			attroff(COLOR_PAIR(not gui.flipcolor));
-			break;
-		default:
-			addch('?');
+				attron(COLOR_PAIR(1));
+				addch(' ');
+				attroff(COLOR_PAIR(1));
+				break;
+
+			case WHITE:	
+				attron(COLOR_PAIR(gui.flipcolor));
+				addch('=');
+				attroff(COLOR_PAIR(gui.flipcolor));
+				break;
+			case WQUEEN:	
+				attron(COLOR_PAIR(gui.flipcolor));
+				addch('#');
+				attroff(COLOR_PAIR(gui.flipcolor));
+				break;
+			case BLACK:	
+				attron(COLOR_PAIR(not gui.flipcolor));
+				addch('=');
+				attroff(COLOR_PAIR(not gui.flipcolor));
+				break;
+			case BQUEEN:	
+				attron(COLOR_PAIR(not gui.flipcolor));
+				addch('#');
+				attroff(COLOR_PAIR(not gui.flipcolor));
+				break;
+			default:
+				addch('?');
 
 		};
-		
+
 	}
-	
+
 	if (s.draw)
 	{
 		move(starty+8,startx-2);
 		addstr("DRAW PROPOSED");
 	};
-	
+
 	if(s.turn<100)
 	{
 		move(starty-2,startx+3);
@@ -1368,256 +1476,282 @@ void GUI::runGUI()
 
 	while(exitall)
 	{
-	drawback();
-	display(s);
-	refresh();
-	char c = getch();
-	strategy os;
-	Move flos;
-	vector<Move> ls,lsf;
-	bool chosen;
-	int choice;
-	char curpos=0;
-	bool drawswitch = false;
+		drawback();
+		display(s);
+		refresh();
+		char c = getch();
+		strategy os;
+		Move flos;
+		vector<Move> ls,lsf;
+		bool chosen;
+		int choice;
+		char curpos=0;
+		bool drawswitch = false;
 
-	switch(c)
-	{
-		case 'q':
-			exitall=false;
-			break;
-		case 'r':
-			s.setup();
-			mes.message("Board reset.");
-			break;
-		case 't':
-			refresh();
-			os = compute(s,0,depth,M_GRAPH);
-			s.apply_move(os.optimal);
-			mes.message(moverep(os.optimal));
-			refresh();
-			break;
-		case 'f':
-			flipcolor = not flipcolor;
-			break;
-		case 'k':
-			while (true)
-			{
-				//message(NToS(s.movestack.size()));
-				os = compute(s,0,depth,M_GRAPH);
+		switch(c)
+		{
+			case 'q':
+				exitall=false;
+				break;
+			case 'r':
+				s.setup();
+				mes.message("Board reset.");
+				break;
+			case 't':
+				refresh();
+				os = compute(s,0,depth, M_ROOT | M_GRAPH);
 				s.apply_move(os.optimal);
-				message(moverep(os.optimal));
-				if (s.turn>=100)
-					message("TIMEOUT");
-
-				if((s.turn>=100) or (os.optimal[0] == SURRENDER) or (os.optimal[0] == ACCEPT_DRAW))
-					break;
-
-				display(s);refresh();
-
-				s.flip();
-
-				os = compute(s,0,depth,M_DEFAULT);
-				s.apply_move(os.optimal);
-				mes.message(moverep(os.optimal),1);
-				s.flip();
-
-				if (s.turn>=100)
-					message("TIMEOUT");
-
-
-				if((s.turn>=100) or (os.optimal[0] == SURRENDER) or (os.optimal[0] == ACCEPT_DRAW))
-					break;
-
-				display(s);refresh();
-				
-
-			}
-			display(s);refresh();
-			break;
-		case 's':
-			depth = max(2,depth-1);
-			message("Depth lowered to "+NToS(depth));
-			break;
-		case 'd':
-			depth = min(11, depth+1);
-			message("Depth raised to "+NToS(depth));
-			break;
-		case 'y':
-			refresh();
-			s.flip();
-			os = compute(s,0,depth);
-			s.apply_move(os.optimal);
-			flos = flipmove(os.optimal);
-			mes.message(moverep(flos),1);
-			s.flip();
-			refresh();
-			break;
-		case 'e':
-			message("Input correction");
-			refresh();
-			chosen = false;
-			for (int i=0; i<5; i++)
-			{
-				move(3+i,20);
-				addstr(NToS(i).c_str());
-			}
-			while(not chosen)
-			{
-				display(s);
-				moveton(curpos);
-				attron(COLOR_PAIR(3));
-				addch('E');
-				attroff(COLOR_PAIR(3));
-				int gh = getch();
-				switch(gh)
+				mes.message(moverep(os.optimal));
+				refresh();
+				break;
+			case 'f':
+				flipcolor = not flipcolor;
+				break;
+			case 'k':
+				while (true)
 				{
-					case KEY_LEFT:
-						curpos = (curpos + 1)%32;
-						break;
-					case KEY_RIGHT:
-						curpos = (curpos - 1 + 32)%32;
-						break;
-					case '0':
-					case '1':
-					case '2':
-					case '3':
-					case '4':
-						s.data[curpos] = (Cell)(gh-'0');
-						chosen = true;
-						break;
-					default:
-						chosen = true;
-				}
-				
-			}	
-			message("Modified.");
-			break;
-			
-		case 'm':
-			s.flip();
-			ls = s.raw_movelist();
-			s.flip();
-			lsf = vector<Move>();
-			for (int i=0; i<ls.size(); i++)
-				lsf.push_back(flipmove(ls[i]));
-			chosen = false;
-			choice = 0;
-		//	message("Choose move.");
-			while (not chosen)
-			{
-				display(s);
-				moveton(lsf[choice].back());
-				attron(COLOR_PAIR(3));
-				addch('X');
-				attroff(COLOR_PAIR(3));
-				moveton(lsf[choice].front());
-				attron(COLOR_PAIR(4));
-				addch('.');
-				attroff(COLOR_PAIR(4));
+					//message(NToS(s.movestack.size()));
+					os = compute(s,0,depth,M_ROOT | M_GRAPH);
+					s.apply_move(os.optimal);
+					message(moverep(os.optimal));
+					if (s.turn>=100)
+						message("TIMEOUT");
 
+					if((s.turn>=100) or (os.optimal[0] == SURRENDER) or (os.optimal[0] == ACCEPT_DRAW))
+						break;
+
+					display(s);refresh();
+
+					s.flip();
+
+					os = compute(s,0,depth,M_ROOT);
+					s.apply_move(os.optimal);
+					mes.message(moverep(os.optimal),1);
+					s.flip();
+
+					if (s.turn>=100)
+						message("TIMEOUT");
+
+
+					if((s.turn>=100) or (os.optimal[0] == SURRENDER) or (os.optimal[0] == ACCEPT_DRAW))
+						break;
+
+					display(s);refresh();
+
+
+				}
+				display(s);refresh();
+				break;
+			case 's':
+				depth = max(2,depth-1);
+				message("Depth lowered to "+NToS(depth));
+				break;
+			case 'd':
+				depth = min(11, depth+1);
+				message("Depth raised to "+NToS(depth));
+				break;
+			case 'y':
+				refresh();
+				s.flip();
+				os = compute(s,0,depth,M_ROOT);
+				s.apply_move(os.optimal);
+				flos = flipmove(os.optimal);
+				mes.message(moverep(flos),1);
+				s.flip();
+				refresh();
+				break;
+			case 'e':
+				message("Input correction");
+				refresh();
+				chosen = false;
+				for (int i=0; i<5; i++)
+				{
+					move(3+i,20);
+					addstr(NToS(i).c_str());
+				}
+				while(not chosen)
+				{
+					display(s);
+					moveton(curpos);
+					attron(COLOR_PAIR(3));
+					addch('E');
+					attroff(COLOR_PAIR(3));
+					int gh = getch();
+					switch(gh)
+					{
+						case KEY_LEFT:
+							curpos = (curpos + 1)%32;
+							break;
+						case KEY_RIGHT:
+							curpos = (curpos - 1 + 32)%32;
+							break;
+						case '0':
+						case '1':
+						case '2':
+						case '3':
+						case '4':
+							s.data[curpos] = (Cell)(gh-'0');
+							chosen = true;
+							break;
+						default:
+							chosen = true;
+					}
+
+				}	
+				message("Modified.");
+				break;
+
+			case 'm':
+				s.flip();
+				ls = s.raw_movelist();
+				s.flip();
+				lsf = vector<Move>();
 				for (int i=0; i<ls.size(); i++)
+					lsf.push_back(flipmove(ls[i]));
+				chosen = false;
+				choice = 0;
+				//	message("Choose move.");
+				while (not chosen)
 				{
-					move(1+i,20);
-					if (choice == i)
-						attron(COLOR_PAIR(2));
-					addstr(moverep(lsf[i]).c_str());
-					if (choice == i)
-						attroff(COLOR_PAIR(2));
+					display(s);
+					moveton(lsf[choice].back());
+					attron(COLOR_PAIR(3));
+					addch('X');
+					attroff(COLOR_PAIR(3));
+					moveton(lsf[choice].front());
+					attron(COLOR_PAIR(4));
+					addch('.');
+					attroff(COLOR_PAIR(4));
+
+					for (int i=0; i<ls.size(); i++)
+					{
+						move(1+i,20);
+						if (choice == i)
+							attron(COLOR_PAIR(2));
+						addstr(moverep(lsf[i]).c_str());
+						if (choice == i)
+							attroff(COLOR_PAIR(2));
+					}
+					move(1+ls.size(),20);
+					attron(COLOR_PAIR(1));
+					if (drawswitch)
+						addstr("[+]");
+					else
+						addstr("[ ]");
+					addstr(" PR.DRAW (p)");
+					attroff(COLOR_PAIR(1));
+					int gh = getch();
+
+					switch(gh)
+					{
+						case 'q':
+						case KEY_BACKSPACE:
+							chosen = true;
+							choice = -1;
+							break;
+						case KEY_ENTER:
+						case ' ':
+						case '\n':
+							chosen = true;
+							break;
+						case KEY_UP:
+							choice = (choice+ls.size()-1)%ls.size();
+							break;
+						case KEY_DOWN:
+							choice = (choice+1)%ls.size();
+							break;
+						case 'p':
+							drawswitch = not drawswitch;
+					}
+
+
 				}
-				move(1+ls.size(),20);
-				attron(COLOR_PAIR(1));
-				if (drawswitch)
-					addstr("[+]");
-				else
-					addstr("[ ]");
-				addstr(" PR.DRAW (p)");
-				attroff(COLOR_PAIR(1));
-				int gh = getch();
-				
-				switch(gh)
-				{
-					case 'q':
-					case KEY_BACKSPACE:
-						chosen = true;
-						choice = -1;
-						break;
-					case KEY_ENTER:
-					case ' ':
-					case '\n':
-						chosen = true;
-						break;
-					case KEY_UP:
-						choice = (choice+ls.size()-1)%ls.size();
-						break;
-					case KEY_DOWN:
-						choice = (choice+1)%ls.size();
-						break;
-					case 'p':
-						drawswitch = not drawswitch;
+				if (choice != -1)
+				{	
+					s.flip();
+					if (drawswitch)
+						ls[choice].push_back(PROPOSE_DRAW);
+
+					s.apply_move(ls[choice]);
+					s.flip();
+					mes.message(moverep(ls[choice]),1);
 				}
-				
-				
-			}
-			if (choice != -1)
-			{	
-				s.flip();
-				if (drawswitch)
-					ls[choice].push_back(PROPOSE_DRAW);
-				
-				s.apply_move(ls[choice]);
-				s.flip();
-				mes.message(moverep(ls[choice]),1);
-			}
-			for (int i=0; i<15; i++){
-			move(3+i,20);
-			addstr("               ");};
+				for (int i=0; i<15; i++){
+					move(3+i,20);
+					addstr("               ");};
 
 
-			break;
+				break;
 
-		default:
-			message("Invalid command.");	
-	}
-	
+			default:
+				message("Invalid command.");	
+		}
+
 	}
 
 	endwin();
 }
 
+void Database::generate_openings(int dd)
+{
+	cout << "Generating opening database... (depth " << dd << ")" << endl;
+	State s;
+	s.setup(); s.flip();
+
+	vector<Move> ls = s.raw_movelist();
+	
+	for(int i=0; i<ls.size(); i++)
+	{
+		cout << "Move " << i << " of " << ls.size() << endl;
+		s.setup();
+		s.flip();
+	
+		s.apply_move(ls[i]);
+
+		s.flip();
+
+		strategy outo = compute(s,0,dd,M_ROOT);	
+
+		insert(s,dd,outo,true);
+
+	}
+	
+	push();
+		
+}
+
 void TEST_database()
 {
+	cout << database.db.size() << endl;
+	cout << database.db.begin()->first << endl;
+	database.push();
+	database.pull();
+	cout << database.db.size() << endl;
+
+	cout << database.db.begin()->first << endl;
+
 	State s;
 	s.setup();
-
-	strategy d1 = database.query(s);
-
-	strategy o;
-	o.value = 0;
-	o.optimal = Move(1,SURRENDER);
-
-	database.insert(s,11,o);
-
-	strategy d2 = database.query(s);
-	
-	s.apply_move(s.raw_movelist()[0]);
-
-	
-	strategy d3 = database.query(s);
-
-	cout << "d1" << moverep(d1.optimal) << endl;
-	cout << "d2" << moverep(d2.optimal) << endl;
-	cout << "d3" << moverep(d3.optimal) << endl;
-
-
-
+	strategy ls = compute(s,0,5,M_ROOT);
+	s.apply_move(ls.optimal);
+	s.drawascii();	
 }
 
 int main(int ac, char* av[])
 {
-//	setlocale(LC_CTYPE,"C-UTF-8");
+	//	setlocale(LC_CTYPE,"C-UTF-8");
 	parse_options(ac,av);
 
 
+	
+	if(vm.count("openings"))
+	{
+		database.generate_openings(vm["depth"].as<int>() );
+		exit(0);
+	}
 
+	cout << "Loading database into memory..." << endl;	
+	database.pull();
 	gui.runGUI();
+	exit(0);
 }

@@ -53,3 +53,19 @@ Avviate il programma in linea di comando. Premete `D` finché la depth non è al
 * al turno del computer: premete `T` e attendete la mossa del computer.
 
 Se in certi momenti della partita il computer è troppo lento, potete premere `S` per abbassare la depth.
+
+
+Altre opzioni in linea di comando
+====================================
+
+```bash
+	./drafts --help
+```
+
+mostra le opzioni disponibili.
+
+`--gui, -g` è equivalente a nessuna opzione e apre la GUI.
+
+`--openings, -o` genera/rigenera il database delle seconde mosse. Di default questo è fatto a profondità 11 se non è specificata l'opzione -d. Il database è salvato in `db/database` e ricaricato a inizio esecuzione della GUI. Il programma usa il database per evitare di calcolare mosse inutilmente.
+
+`--depth, -d n` imposta la profondità di ricerca ad n mosse in avanti nelle ricerche in linea di comando (nella GUI invece si imposta manualmente con `S`/`D`). Notare che una profondità inferiore a 12 rende poco utile il precalcolo delle mosse.

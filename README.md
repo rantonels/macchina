@@ -66,6 +66,24 @@ mostra le opzioni disponibili.
 
 `--gui, -g` è equivalente a nessuna opzione e apre la GUI.
 
-`--openings, -o` genera/rigenera il database delle seconde mosse. Di default questo è fatto a profondità 11 se non è specificata l'opzione -d. Il database è salvato in `db/database` e ricaricato a inizio esecuzione della GUI. Il programma usa il database per evitare di calcolare mosse inutilmente.
+`--depth, -d n` imposta la profondità di ricerca ad n mosse in avanti nelle ricerche in linea di comando (nella GUI invece si imposta manualmente con `S`/`D`). Notare che una profondità inferiore a 12 rende poco utile il precalcolo delle mosse. 
 
-`--depth, -d n` imposta la profondità di ricerca ad n mosse in avanti nelle ricerche in linea di comando (nella GUI invece si imposta manualmente con `S`/`D`). Notare che una profondità inferiore a 12 rende poco utile il precalcolo delle mosse.
+`--openings, -o` genera/rigenera il database delle seconde mosse. Di default questo è fatto a profondità 11 se non è specificata l'opzione -d. Il database è salvato in `db/database` e ricaricato a inizio esecuzione della GUI. Il programma usa il database per evitare di calcolare mosse inutilmente. Ad esempio, se digitate
+
+```bash
+	./drafts --openings -d 12`
+```
+
+e andate a farvi un tè, al vostro ritorno il database sara aggiornato con le aperture esaminate a profondità 12. Se tutto va bene, la prossima volta che avviate il programma eseguirà le prime due mosse istantaneamente (e meglio).
+
+
+La dama galileiana
+======================
+
+La dama galileiana ufficiale è un misto della dama inglese e di quella italiana. I tratti essenziali sono:
+
+- La plancia viene posizionata con l'angolo nero in basso a sinistra, e si gioca sulle caselle nere.
+- Le pedine mangiano sempre e solo in avanti, e non mangiano le dame.
+- Quando un giocatore può mangiare, deve farlo (non esiste il *soffio*). Non è costretto a massimizzare il numero di pedine mangiate né con cosa mangiare. Però è tenuto a mangiare finché può.
+- Eseguita la centesima mossa, la partita termina. Si contano le pedine (le dame valgono doppio) e chi è in vantaggio vince. Se i punteggi sono uguali è patta.
+- Se un giocatore non ha più mosse disponibili, è patta (non persa).

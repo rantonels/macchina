@@ -12,8 +12,9 @@ using namespace std;
 #include <ncurses.h> 
 //#include <locale.h>
 #include "boost/program_options.hpp" 
-
+#include <stack>
 #include <fstream>
+#include <array>
 
 // OPZIONI
 namespace po = boost::program_options;
@@ -788,7 +789,7 @@ struct Dbentry {
 	strategy strat;
 };
 
-typedef map<Cell*, Dbentry, compare_boards> dbtype;
+typedef map<array<Cell,32>, Dbentry> dbtype;
 
 class Database {
 	public:
@@ -805,7 +806,12 @@ class Database {
 strategy Database::query(State s)
 {
 	strategy outs;
-	dbtype::iterator it = db.find(s.data);
+	array<Cell,32> ar;
+	for (int i=0; i<32; i++)
+		ar[i] = s.data[i];
+
+
+	dbtype::iterator it = db.find(ar);
 
 	if(it == db.end())
 	{
@@ -823,7 +829,11 @@ strategy Database::query(State s)
 
 void Database::insert(State s, char depth, strategy strat, bool force=false)
 {
-	dbtype::iterator it = db.find(s.data);
+	array<Cell,32> ar;
+	for (int i=0; i<32; i++)
+		ar[i] = s.data[i];
+
+	dbtype::iterator it = db.find(ar);
 	if((it == db.end()) or (force or  ((*it).second.depth < depth)))
 	{
 
@@ -834,11 +844,11 @@ void Database::insert(State s, char depth, strategy strat, bool force=false)
 		n.depth = depth;
 		n.strat = strat;
 
-		Cell *o = new Cell[32];
-		for (int i=0;i<32;i++)
-			o[i] = s.data[i];
+//		Cell *o = new Cell[32];
+//		for (int i=0;i<32;i++)
+//			o[i] = s.data[i];
 
-		db[o] = n;
+		db[ar] = n;
 	}
 	else
 	{
@@ -876,7 +886,7 @@ void Database::push()
 	{
 		//Il file e' diviso in settori da 64 byte.
 		//I primi 32 byte sono allocati per la board (e' uno spreco, ma e' veloce)
-		ofile.write( (*it).first, 32);
+		ofile.write( (*it).first.data(), 32);
 		
 		//Poi 16 byte alla mossa ottimale
 		for (int i=0; i<16; i++)
@@ -913,7 +923,7 @@ void Database::pull()
 				cout << "WARNING: STRAY CHARS " << ifile.gcount() << endl;
 			break;
 		}
-		Cell* br = new Cell [32];
+		array<Cell,32> br;
 		
 		for(int i=0; i<32; i++)
 			br[i] = buffer[i];
@@ -1368,10 +1378,14 @@ void GUI::drawback()
 	move(11,3);
 	addstr(" abcdefgh ");
 
-	move(1,35);
-	char buff[2];
+	move(1,40);
+	char buff[20];
 	sprintf(buff,"Depth: %d",depth);
 
+	addstr(buff);
+
+	move(2,40);
+	sprintf(buff,"DB size: %d",database.db.size());
 	addstr(buff);
 
 }
@@ -1723,12 +1737,12 @@ void Database::generate_openings(int dd)
 void TEST_database()
 {
 	cout << database.db.size() << endl;
-	cout << database.db.begin()->first << endl;
+	cout << database.db.begin()->first.data() << endl;
 	database.push();
 	database.pull();
 	cout << database.db.size() << endl;
 
-	cout << database.db.begin()->first << endl;
+	cout << database.db.begin()->first.data() << endl;
 
 	State s;
 	s.setup();

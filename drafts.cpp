@@ -4,6 +4,7 @@ using namespace std;
 #include <vector>
 #include <string>
 #include <cstring>
+#include <cstdlib>
 #include <sstream>
 #include <map>
 #include "tree.hh"
@@ -15,6 +16,7 @@ using namespace std;
 #include <stack>
 #include <fstream>
 #include <array>
+#include <stdint.h>
 
 // OPZIONI
 namespace po = boost::program_options;
@@ -949,7 +951,7 @@ void Database::pull()
 	ifile.close();
 }
 
-//-------MINIMAX-------
+//--EVALUATION FUNCTION--
 
 const int PVAL = 10;
 const int QUEENVAL = 25;
@@ -975,6 +977,7 @@ int center(int c)
 {
 	return - (c*(c-3) )/2;
 }
+
 
 float State::value_function()
 {
@@ -1026,11 +1029,84 @@ float State::value_function()
 
 }
 
+//--TRANSPOSITION TABLE--
+
+const int TTBSIZE = 16384;
+
+struct htentry {
+	bool active;
+	uint32_t hash;
+	char depth;
+	State state;
+	strategy optimal;
+};
+
+class Htable {
+	public:
+		Htable();		
+			//[posizione][tipopedina]
+		uint32_t rnums[32][16];
+		void init_rng();
+		uint32_t hash(State * sp);
+		
+		int accesscounter;
+		
+		htentry table[TTBSIZE];	
+		void clear();		
+
+} hata;
+
+Htable::Htable()
+{
+	init_rng();
+	clear();
+	accesscounter = 0;
+}
+
+void Htable::clear()
+{
+	for (int i =0; i<TTBSIZE; i++)
+		table[i].active = false;
+}
+
+void Htable::init_rng()
+{
+	srand (static_cast <unsigned> (time(0)));	
+	for (int i=0; i<32; i++) for(int j=0; j<16; j++)
+	{
+		uint32_t x = 0;
+		x = rand() & 0xff;
+		x |= (rand() & 0xff) << 8;
+		x |= (rand() & 0xff) << 16;
+		x |= (rand() & 0xff) << 24;
+		rnums[i][j] = x;
+	}
+}
+
+uint32_t Htable::hash(State * sp)
+{
+	uint32_t h = 0;
+
+	for (int i=0; i<32; i++)
+	{
+		h = h xor (rnums[i][ sp->data[i] ]);
+	}
+
+	h = h xor (rnums[7][ (sp->turn)%16]);
+	h = h xor (rnums[9][ 7*(sp->draw)]);
+
+	return h;
+}
+
+
+
+
+
+
+//----MINIMAX----
 
 const unsigned char	M_ROOT=0x01;
 const unsigned char	M_GRAPH=0x02;
-
-
 
 //la funzione ritorna il punteggio stimato sempre per il giocatore turn!
 
@@ -1053,10 +1129,13 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 	//cout << "beyond flipping & leaf test" << endl;
 
 
-	//ricerca nel database
+	//operazioni preliminari sul nodo root
 
 	if((mode & M_ROOT)==M_ROOT)
 	{
+		
+		
+		//cerca nel database
 		strategy res = database.query(original);
 		if(not (res.optimal[0] == NOT_DATABASE))
 		{
@@ -1068,7 +1147,27 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 			return res;
 		}
 
-	};
+	}
+	else
+	{
+		//operazioni preliminari sul nodi non root
+
+		//cout << "pronto per la ricerca in ht..." << endl;
+		//ricerca in hashtable
+		uint32_t h = hata.hash(&original);
+		if((hata.table[h%TTBSIZE].active) and (hata.table[h%TTBSIZE].depth >= depth) and (hata.table[h%TTBSIZE].hash == h) )
+		{
+			
+			//trovato nella hashtable. Ricopiare semplicemente
+			//cout << "found in ht" << endl;
+			hata.accesscounter++;
+			return hata.table[h%TTBSIZE].optimal;
+			
+		}
+		//cout << "fine ricerca in ht..." << endl;
+
+	}
+
 
 	//generazione movestack
 	vector<Move> ls = original.raw_movelist();
@@ -1216,6 +1315,18 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 		if (adddraw)	
 			out.optimal.push_back(PROPOSE_DRAW);
 	}
+
+	//salva la strategia nell'hashtable
+	//cout << "pronto per il salvataggio nell'ht..." << endl;
+	uint32_t h = hata.hash(&original);
+	if( (not(hata.table[h%TTBSIZE].active)) or (hata.table[h%TTBSIZE].depth < depth) )
+	{
+		hata.table[h%TTBSIZE].active = true;
+		hata.table[h%TTBSIZE].optimal = out;
+		hata.table[h%TTBSIZE].depth = depth;
+		hata.table[h%TTBSIZE].hash = h;
+	};
+
 	return out;
 }
 
@@ -1388,6 +1499,11 @@ void GUI::drawback()
 	sprintf(buff,"DB size: %d",database.db.size());
 	addstr(buff);
 
+
+	move(3,40);
+	sprintf(buff,"HT accesses: %d", hata.accesscounter);
+	addstr(buff);
+
 }
 
 
@@ -1509,6 +1625,7 @@ void GUI::runGUI()
 				break;
 			case 'r':
 				s.setup();
+				hata.clear();
 				mes.message("Board reset.");
 				break;
 			case 't':
@@ -1534,7 +1651,7 @@ void GUI::runGUI()
 					if((s.turn>=100) or (os.optimal[0] == SURRENDER) or (os.optimal[0] == ACCEPT_DRAW))
 						break;
 
-					display(s);refresh();
+					drawback();display(s);refresh();
 
 					s.flip();
 
@@ -1550,7 +1667,7 @@ void GUI::runGUI()
 					if((s.turn>=100) or (os.optimal[0] == SURRENDER) or (os.optimal[0] == ACCEPT_DRAW))
 						break;
 
-					display(s);refresh();
+					drawback();display(s);refresh();
 
 
 				}
@@ -1561,7 +1678,7 @@ void GUI::runGUI()
 				message("Depth lowered to "+NToS(depth));
 				break;
 			case 'd':
-				depth = min(11, depth+1);
+				depth = min(12, depth+1);
 				message("Depth raised to "+NToS(depth));
 				break;
 			case 'y':
@@ -1751,11 +1868,20 @@ void TEST_database()
 	s.drawascii();	
 }
 
+void TEST_hashtable()
+{
+	hata.clear();
+	State s;
+	s.setup();
+	cout << hata.hash(&s) << endl;
+}
+
 int main(int ac, char* av[])
 {
 	//	setlocale(LC_CTYPE,"C-UTF-8");
 	parse_options(ac,av);
 
+//	TEST_hashtable(); exit(0);
 
 	
 	if(vm.count("openings"))

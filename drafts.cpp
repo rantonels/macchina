@@ -31,9 +31,10 @@ void parse_options(int ac, char* av[]){
 		("gui,g", "run GUI (default)")
 		("openings,o", "generate openings database (use with -d)")
 		("depth,d", po::value<int>()->default_value(11), "set search depth for cmdline computation")
+		("ptest", "run a test for profiling")
 		;
 
-//	po::variables_map vm;
+	//	po::variables_map vm;
 	po::store(po::parse_command_line(ac,av,desc), vm);
 	po::notify(vm);
 
@@ -136,7 +137,7 @@ string moverep(Move m)
 	string suffix = "";
 	if (m.back() == PROPOSE_DRAW)
 	{
-		suffix = " (proposes draw).";
+		suffix = " (prop. draw)";
 		m.pop_back();
 	}
 
@@ -191,7 +192,7 @@ Move parsemove(string ss)
 
 //infinito
 
-const float INFTY = numeric_limits<float>::max();
+const int INFTY = INT_MAX;
 
 //lookup table per gli spostamenti in avanti di uno
 
@@ -337,23 +338,23 @@ class State {
 		bool draw;
 		char turn;
 
-		void copyfrom(State s);
+		void copyfrom(State *s);
 		void drawascii();
 		vector<Move> raw_movelist();
 		void clear();
 		void setup();
 		void apply_move(Move m);
 		void flip();
-		float value_function();
+		int value_function();
 };
 
-void State::copyfrom(State s)
+void State::copyfrom(State* s)
 {
 	for(int i=0;i<32;i++)
-		data[i] = s.data[i];
-	movestack = s.movestack;
-	draw = s.draw;
-	turn = s.turn;
+		data[i] = s->data[i];
+	movestack = s->movestack;
+	draw = s->draw;
+	turn = s->turn;
 }
 
 State::State() {
@@ -469,26 +470,44 @@ void State::apply_move(Move m)
 
 }
 
+const char fliplookup [8] = {
+	VOID,
+	BLACK,
+	WHITE,
+	BQUEEN,
+	WQUEEN,
+	0,0,0
+};
+
 char flipdame(char d)
 {
-	switch(d)
-	{
-		case VOID: return VOID;break;
-		case WHITE: return BLACK;break;
-		case BLACK: return WHITE;break;
-		case WQUEEN: return BQUEEN;break;
-		case BQUEEN: return WQUEEN;break;
-	};
-	return VOID;
+	return fliplookup[d];
+	//switch(d)
+	//{
+		//case VOID: return VOID;break;
+		//case WHITE: return BLACK;break;
+		//case BLACK: return WHITE;break;
+		//case WQUEEN: return BQUEEN;break;
+		//case BQUEEN: return WQUEEN;break;
+	//};
+	//return VOID;
 }
 
 void State::flip()
 {
-	char tmp[32];
-	for (int i=0; i<32; i++)
-		tmp[i] = data[31-i];
-	for (int j=0; j<32; j++)
-		data[j] = (Cell)flipdame(tmp[j]);
+	//char tmp[32];
+	//for (int i=0; i<32; i++)
+		//tmp[i] = data[31-i];
+	//for (int j=0; j<32; j++)
+		//data[j] = (Cell)flipdame(tmp[j]);
+
+	char tmp;
+	for (int i=0; i<16; i++)
+	{
+		tmp = data[i];
+		data[i] = flipdame(data[31-i]);
+		data[31-i] = flipdame(tmp);
+	}
 
 }
 
@@ -715,42 +734,42 @@ vector<Move> State::raw_movelist()
 	for (int i=0;i<32;i++)
 	{
 		counter = 0;
-		if (data[i] == WHITE) //if there's a white piece
-		{
-			for(int k=0;k<2;k++)
-				if ((FORW[i][k] != 99) && (data[FORW[i][k]] == VOID))
-				{
-					Move m = mpair(i,FORW[i][k]);
+		switch(data[i])
+		{ 
+			case WHITE: //if there's a white piece
 
-
-					outlist.push_back(m);
-					counter ++;
-				}
-
-
-		}
-		if (data[i] == WQUEEN) //if there's a white king
-		{
-
-
-			for (int j=0; j<4; j++)
-			{
-				if ((KING[i][j] != 99) && (data[KING[i][j]] == VOID))
-				{
-					Move m = mpair(i,KING[i][j]);
-
-
-					//cerca mossa nello stack
-					int reps = count(movestack.begin(), movestack.end(), m);
-					if (reps > 1)
+				for(int k=0;k<2;k++)
+					if ((FORW[i][k] != 99) && (data[FORW[i][k]] == VOID))
 					{
-						continue;
-					}	
+						Move m = mpair(i,FORW[i][k]);
 
-					outlist.push_back(m);
-					counter++;
+
+						outlist.push_back(m);
+						counter ++;
+					}
+
+
+				break;
+			case WQUEEN: //if there's a white king
+				for (int j=0; j<4; j++)
+				{
+					if ((KING[i][j] != 99) && (data[KING[i][j]] == VOID))
+					{
+						Move m = mpair(i,KING[i][j]);
+
+
+						//cerca mossa nello stack
+						int reps = count(movestack.begin(), movestack.end(), m);
+						if (reps > 1)
+						{
+							continue;
+						}	
+
+						outlist.push_back(m);
+						counter++;
+					}
 				}
-			}
+				break;
 		}
 
 
@@ -846,15 +865,15 @@ void Database::insert(State s, char depth, strategy strat, bool force=false)
 		n.depth = depth;
 		n.strat = strat;
 
-//		Cell *o = new Cell[32];
-//		for (int i=0;i<32;i++)
-//			o[i] = s.data[i];
+		//		Cell *o = new Cell[32];
+		//		for (int i=0;i<32;i++)
+		//			o[i] = s.data[i];
 
 		db[ar] = n;
 	}
 	else
 	{
-//		cout << "WARNING: insert aborted." << endl;
+		//		cout << "WARNING: insert aborted." << endl;
 	}
 };
 
@@ -889,7 +908,7 @@ void Database::push()
 		//Il file e' diviso in settori da 64 byte.
 		//I primi 32 byte sono allocati per la board (e' uno spreco, ma e' veloce)
 		ofile.write( (*it).first.data(), 32);
-		
+
 		//Poi 16 byte alla mossa ottimale
 		for (int i=0; i<16; i++)
 			buffer[i] = ENDMOVE_CARRIAGE;
@@ -900,7 +919,7 @@ void Database::push()
 		//Infine 16 byte per ora vuoti
 		ofile.write(buffer,16);
 
-		 
+
 	}
 
 	ofile.close();
@@ -911,7 +930,7 @@ void Database::pull()
 {
 	ifstream ifile;
 	ifile.open(DBFILE, ios::in | ios::binary);
-	
+
 	db.clear();
 
 	char buffer[64];
@@ -926,7 +945,7 @@ void Database::pull()
 			break;
 		}
 		array<Cell,32> br;
-		
+
 		for(int i=0; i<32; i++)
 			br[i] = buffer[i];
 
@@ -947,7 +966,7 @@ void Database::pull()
 
 		db[br] = n;
 	}
-		
+
 	ifile.close();
 }
 
@@ -965,10 +984,10 @@ string valrep(float val)
 	if (val<=-100000)
 		return "Loss.";
 
-	float v = val/10.0;
+	int v = val;///10.0;
 	char buffer[10];
 
-	sprintf(buffer,"%4.1f",v);
+	sprintf(buffer,"%d",v);
 
 	return string(buffer);
 }
@@ -979,7 +998,7 @@ int center(int c)
 }
 
 
-float State::value_function()
+int State::value_function()
 {
 	if(turn >= 100) //fine tempo
 	{
@@ -1000,30 +1019,31 @@ float State::value_function()
 
 	}
 
-	float val = 0;
-	//conteggio bianchi
-	float b = 0;
+	int val = 0;
+	int b,n;int tmp;
+	b = 0;n=0;
 	for (int i=0; i<32; i++)
 	{
-		b +=(1+CENTERVAL*center(i%4) )*(PVAL+FROWVAL*((i/4)==7))*(data[i] == WHITE) + QUEENVAL*(data[i] == WQUEEN);
+		//conteggio bianchi
+		tmp = (PVAL+FROWVAL*((i/4)==7))*(data[i] == WHITE) + QUEENVAL*(data[i] == WQUEEN);
+		b += 10*tmp + center(i%4)*(tmp/10); //moltiplica per 1.1
+
+		//conteggio neri
+		tmp = (PVAL+FROWVAL*((i/4)==0))*(data[i] == BLACK) + QUEENVAL*(data[i] == BQUEEN);
+		n += 10*tmp + center(i%4)*(tmp/10); //moltiplica per 1.1
 	}	
+
 	//-infinito se non ci sono piu' bianchi
 	if (b == 0)
 		return -INFTY; 
 
 	val += b;
 
-	//conteggio neri
-	b = 0;
-	for (int i=0; i<32; i++)
-	{
-		b += (1+CENTERVAL*center(i%4 ) )* (PVAL+FROWVAL*((i/4)==0))*(data[i] == BLACK) + QUEENVAL*(data[i] == BQUEEN);
-	}	
 	//+infinito se non ci sono piu' neri
 	if (b == 0)
 		return INFTY; 
 
-	val -= b;
+	val -= n;
 
 	return val;
 
@@ -1044,13 +1064,13 @@ struct htentry {
 class Htable {
 	public:
 		Htable();		
-			//[posizione][tipopedina]
+		//[posizione][tipopedina]
 		uint32_t rnums[32][16];
 		void init_rng();
 		uint32_t hash(State * sp);
-		
+
 		int accesscounter;
-		
+
 		htentry table[TTBSIZE];	
 		void clear();		
 
@@ -1065,6 +1085,7 @@ Htable::Htable()
 
 void Htable::clear()
 {
+	accesscounter = 0;
 	for (int i =0; i<TTBSIZE; i++)
 		table[i].active = false;
 }
@@ -1133,8 +1154,8 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 
 	if((mode & M_ROOT)==M_ROOT)
 	{
-		
-		
+
+
 		//cerca nel database
 		strategy res = database.query(original);
 		if(not (res.optimal[0] == NOT_DATABASE))
@@ -1157,12 +1178,12 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 		uint32_t h = hata.hash(&original);
 		if((hata.table[h%TTBSIZE].active) and (hata.table[h%TTBSIZE].depth >= depth) and (hata.table[h%TTBSIZE].hash == h) )
 		{
-			
+
 			//trovato nella hashtable. Ricopiare semplicemente
 			//cout << "found in ht" << endl;
 			hata.accesscounter++;
 			return hata.table[h%TTBSIZE].optimal;
-			
+
 		}
 		//cout << "fine ricerca in ht..." << endl;
 
@@ -1229,7 +1250,7 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 		{
 			State tmp;
 			//copy original->tmp
-			tmp.copyfrom(original);
+			tmp.copyfrom(&original);
 
 			tmp.apply_move(ls[i]);
 			if (turn)
@@ -1489,6 +1510,12 @@ void GUI::drawback()
 	move(11,3);
 	addstr(" abcdefgh ");
 
+	for (int i=0;i<3;i++)
+	{
+		move(1+i,40);
+		addstr("                     ");
+	}
+
 	move(1,40);
 	char buff[20];
 	sprintf(buff,"Depth: %d",depth);
@@ -1632,7 +1659,7 @@ void GUI::runGUI()
 				refresh();
 				os = compute(s,0,depth, M_ROOT | M_GRAPH);
 				s.apply_move(os.optimal);
-				mes.message(moverep(os.optimal));
+				mes.message(moverep(os.optimal),flipcolor);
 				refresh();
 				break;
 			case 'f':
@@ -1687,7 +1714,7 @@ void GUI::runGUI()
 				os = compute(s,0,depth,M_ROOT);
 				s.apply_move(os.optimal);
 				flos = flipmove(os.optimal);
-				mes.message(moverep(flos),1);
+				mes.message(moverep(flos),not flipcolor);
 				s.flip();
 				refresh();
 				break;
@@ -1805,7 +1832,7 @@ void GUI::runGUI()
 
 					s.apply_move(ls[choice]);
 					s.flip();
-					mes.message(moverep(ls[choice]),1);
+					mes.message(moverep(flipmove(ls[choice])),not flipcolor);
 				}
 				for (int i=0; i<15; i++){
 					move(3+i,20);
@@ -1830,13 +1857,13 @@ void Database::generate_openings(int dd)
 	s.setup(); s.flip();
 
 	vector<Move> ls = s.raw_movelist();
-	
+
 	for(int i=0; i<ls.size(); i++)
 	{
 		cout << "Move " << i << " of " << ls.size() << endl;
 		s.setup();
 		s.flip();
-	
+
 		s.apply_move(ls[i]);
 
 		s.flip();
@@ -1846,9 +1873,9 @@ void Database::generate_openings(int dd)
 		insert(s,dd,outo,true);
 
 	}
-	
+
 	push();
-		
+
 }
 
 void TEST_database()
@@ -1876,17 +1903,38 @@ void TEST_hashtable()
 	cout << hata.hash(&s) << endl;
 }
 
+void TEST_profiling()
+
+{
+	State s;
+	s.setup();
+	cout << "Scramblin'" << endl;
+	for(int i=0;i<3;i++)
+		s.apply_move(s.raw_movelist()[0]);
+	cout << "Computin'" << endl;
+	strategy ss = compute(s,0,5,M_ROOT);
+	cout << "Done." << endl;
+
+
+}
+
 int main(int ac, char* av[])
 {
 	//	setlocale(LC_CTYPE,"C-UTF-8");
 	parse_options(ac,av);
 
-//	TEST_hashtable(); exit(0);
+	//	TEST_hashtable(); exit(0);
 
-	
+
 	if(vm.count("openings"))
 	{
 		database.generate_openings(vm["depth"].as<int>() );
+		exit(0);
+	}
+
+	if(vm.count("ptest"))
+	{
+		TEST_profiling();
 		exit(0);
 	}
 

@@ -17,6 +17,7 @@ using namespace std;
 #include <fstream>
 #include <array>
 #include <stdint.h>
+#include <bitset>
 
 // OPZIONI
 namespace po = boost::program_options;
@@ -32,6 +33,7 @@ void parse_options(int ac, char* av[]){
 		("openings,o", "generate openings database (use with -d)")
 		("depth,d", po::value<int>()->default_value(11), "set search depth for cmdline computation")
 		("ptest", "run a test for profiling")
+		("evolution","enter evolution mode")
 		;
 
 	//	po::variables_map vm;
@@ -46,6 +48,18 @@ void parse_options(int ac, char* av[]){
 
 };
 
+//UTILITA'
+
+uint32_t rand32(){
+
+	uint32_t x;
+	x = rand() & 0xff;
+	x |= (rand() & 0xff) << 8;
+	x |= (rand() & 0xff) << 16;
+	x |= (rand() & 0xff) << 24;
+
+	return x;
+}
 
 //PARAMETRI GLOBALI
 
@@ -75,6 +89,9 @@ const char WHITE=1;
 const char BLACK=2;
 const char WQUEEN=3;
 const char BQUEEN=4;
+
+//white mask : (n || 0x01)
+//black mask : (n-1) || 0x01
 
 //def tipo di mossa
 
@@ -559,11 +576,11 @@ vector<Move> State::raw_movelist()
 	//generazione salti
 	for (int i=0;i<32;i++)
 	{
-		if ((data[i] == WHITE) or (data[i] == WQUEEN))
+		if (data[i] & 0x01)  //((data[i] == WHITE) or (data[i] == WQUEEN))
 		{
 			//	cout << "PROCESSING CELL" << cellrep(i) << endl;
 			//un numero utile: 2 per le pedine, 4 per le dame
-			int nlen = 2*(data[i]==WHITE)+4*(data[i]==WQUEEN);
+			int nlen = data[i] + 1;    // 2*(data[i]==WHITE)+4*(data[i]==WQUEEN);        (le comparison sono il male)
 			//	cout << "nlen = "<< nlen << endl;
 
 			//check preliminare per risparmiare
@@ -605,7 +622,8 @@ vector<Move> State::raw_movelist()
 
 			//loop principale di costruzione dell'albero
 
-			for(int control=0; control<50; control++)//contatore di controllo per evitare loop infiniti
+			int control;
+			for(control=0; control<50; control++)//contatore di controllo per evitare loop infiniti
 			{
 				//		cout << "CICLO ITERATIVO." << endl;
 
@@ -697,6 +715,9 @@ vector<Move> State::raw_movelist()
 
 			//ricostruisci i percorsi a partire dalle foglie e aggiungili alle mosse
 
+			if (control == 0)
+				continue;
+
 			leaf = jtree.begin_leaf();
 			endleaf = jtree.end_leaf();
 
@@ -721,8 +742,8 @@ vector<Move> State::raw_movelist()
 
 
 
-		}
-	}
+		}//fine if bianco
+	}//fine ciclo sulle caselle
 
 	//se c'e' almeno un salto, niente mosse normali
 	if (outlist.size()>0)
@@ -970,12 +991,42 @@ void Database::pull()
 	ifile.close();
 }
 
-//--EVALUATION FUNCTION--
+//--GENETIC CODE
 
-const int PVAL = 10;
-const int QUEENVAL = 25;
-const int FROWVAL = 4;
-const float CENTERVAL = .1;
+const int PIECEVAL = 10;
+
+unsigned char PVAL = 10;
+unsigned char QUEENVAL = 25;
+unsigned char FROWVAL = 4;
+unsigned char CENTERVAL = 1;
+
+uint32_t pack_genome(char PV,char QUEENV, char FROMV, char CENTERV)
+{
+	uint32_t out =	 (int)PV +
+			((int)QUEENV	<< 8) +
+			((int)FROMV	<< 16) +
+			((int)CENTERV << 24);
+	return out;
+}
+
+
+void unpack_genome(uint32_t genome)
+{
+	PVAL 		= (genome & 0x000000FF);
+	QUEENVAL	= (genome & 0x0000FF00)>>8;
+	FROWVAL		= (genome & 0x00FF0000)>>16;
+	CENTERVAL	= (genome & 0xFF000000)>>24;
+}
+
+string genrep(uint32_t genome)
+{
+	char buffer[8];
+	sprintf(buffer,"%08X",genome);
+	string out = buffer;
+	return out;
+}
+
+//--EVALUATION FUNCTION--
 
 string valrep(float val)
 {
@@ -1025,12 +1076,12 @@ int State::value_function()
 	for (int i=0; i<32; i++)
 	{
 		//conteggio bianchi
-		tmp = (PVAL+FROWVAL*((i/4)==7))*(data[i] == WHITE) + QUEENVAL*(data[i] == WQUEEN);
-		b += 10*tmp + center(i%4)*(tmp/10); //moltiplica per 1.1
+		tmp = (PIECEVAL+FROWVAL*((i/4)==7))*(data[i] == WHITE) + QUEENVAL*(data[i] == WQUEEN);
+		b += 10*tmp + CENTERVAL*center(i%4)*(tmp/10); //moltiplica per 1.1
 
 		//conteggio neri
-		tmp = (PVAL+FROWVAL*((i/4)==0))*(data[i] == BLACK) + QUEENVAL*(data[i] == BQUEEN);
-		n += 10*tmp + center(i%4)*(tmp/10); //moltiplica per 1.1
+		tmp = (PIECEVAL+FROWVAL*((i/4)==0))*(data[i] == BLACK) + QUEENVAL*(data[i] == BQUEEN);
+		n += 10*tmp + CENTERVAL*center(i%4)*(tmp/10); //moltiplica per 1.1
 	}	
 
 	//-infinito se non ci sono piu' bianchi
@@ -1051,7 +1102,7 @@ int State::value_function()
 
 //--TRANSPOSITION TABLE--
 
-const int TTBSIZE = 16384;
+const int TTBSIZE = 32768;
 
 struct htentry {
 	bool active;
@@ -1095,11 +1146,7 @@ void Htable::init_rng()
 	srand (static_cast <unsigned> (time(0)));	
 	for (int i=0; i<32; i++) for(int j=0; j<16; j++)
 	{
-		uint32_t x = 0;
-		x = rand() & 0xff;
-		x |= (rand() & 0xff) << 8;
-		x |= (rand() & 0xff) << 16;
-		x |= (rand() & 0xff) << 24;
+		uint32_t x = rand32();
 		rnums[i][j] = x;
 	}
 }
@@ -1128,6 +1175,7 @@ uint32_t Htable::hash(State * sp)
 
 const unsigned char	M_ROOT=0x01;
 const unsigned char	M_GRAPH=0x02;
+const unsigned char	M_GRAPHCOLOR=0x04;
 
 //la funzione ritorna il punteggio stimato sempre per il giocatore turn!
 
@@ -1168,6 +1216,11 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 			return res;
 		}
 
+		if (hata.accesscounter >= (TTBSIZE>>2))
+		{
+			hata.clear();
+		}
+ 
 	}
 	else
 	{
@@ -1221,6 +1274,9 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 	//preparazione display mosse
 	if((mode & M_GRAPH) == M_GRAPH)
 	{
+		
+		char col = ((mode & M_GRAPHCOLOR) == M_GRAPHCOLOR);
+		attron(COLOR_PAIR(col));
 		for (int i=0; i<20; i++){
 			move(1+i,20);
 			addstr("                   ");};
@@ -1230,6 +1286,7 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 			move(1+i,27);
 			addstr(moverep(ls[i]).c_str());
 		};
+		attroff(COLOR_PAIR(col));
 		refresh();
 	};
 
@@ -1272,8 +1329,11 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 		//update display
 		if((mode & M_GRAPH) == M_GRAPH)
 		{
+			char col = ((mode & M_GRAPHCOLOR) == M_GRAPHCOLOR);
 			move(1+i,20);
+			attron(COLOR_PAIR(col));
 			addstr(valrep(-points[i]).c_str());
+			attroff(COLOR_PAIR(col));
 			refresh();
 		}
 
@@ -1491,6 +1551,8 @@ class GUI
 	bool flipcolor;
 	void runGUI();
 	void drawback();
+
+	uint32_t whitegenome,blackgenome;
 } gui;
 
 
@@ -1510,10 +1572,11 @@ void GUI::drawback()
 	move(11,3);
 	addstr(" abcdefgh ");
 
-	for (int i=0;i<3;i++)
+	for (int i=0;i<15;i++)
 	{
-		move(1+i,40);
-		addstr("                     ");
+		move(1+i,20);
+		addstr("                                      ");
+
 	}
 
 	move(1,40);
@@ -1531,6 +1594,10 @@ void GUI::drawback()
 	sprintf(buff,"HT accesses: %d", hata.accesscounter);
 	addstr(buff);
 
+	move(4,40);
+	addstr(genrep(gui.whitegenome).c_str());
+	move(5,40);
+	addstr(genrep(gui.blackgenome).c_str());
 }
 
 
@@ -1607,9 +1674,21 @@ void display(State s)
 
 }
 
+//GENOMI
+
+//0104190A - default, manuale
+//0E07D719 - lucky fellow
+//04021799 - little beast
+
 
 void GUI::runGUI()
 {
+//	unpack_genome(0x0E07D719); //lucky fellow!
+	uint32_t gen_default = pack_genome(PVAL,QUEENVAL,FROWVAL,CENTERVAL);
+
+	whitegenome = gen_default;
+	blackgenome = gen_default;
+
 	initscr();
 
 	start_color();			
@@ -1626,6 +1705,7 @@ void GUI::runGUI()
 
 	State s;
 	s.setup();
+	vector<State> history;
 
 	depth = 5;
 
@@ -1633,7 +1713,7 @@ void GUI::runGUI()
 
 	while(exitall)
 	{
-		drawback();
+//		drawback();
 		display(s);
 		refresh();
 		char c = getch();
@@ -1644,6 +1724,15 @@ void GUI::runGUI()
 		int choice;
 		char curpos=0;
 		bool drawswitch = false;
+		int chocho;
+		bool weredun;
+
+		State h;
+		if(true)//(history.size()==0) or (history.back() != s))
+		{
+			h.copyfrom(&s);
+			history.push_back(h);
+		}
 
 		switch(c)
 		{
@@ -1653,10 +1742,77 @@ void GUI::runGUI()
 			case 'r':
 				s.setup();
 				hata.clear();
+				drawback();display(s);
 				mes.message("Board reset.");
 				break;
-			case 't':
+			case 'g':
+				move(4,40);
+				char instr[8];
+				echo();
+				getstr(instr);
+				noecho();
+				whitegenome = (uint32_t)strtol(instr, NULL, 16);
+	
+				echo();
+				move(5,40);
+				getstr(instr);
+				noecho();
+
+				blackgenome = (uint32_t)strtol(instr, NULL, 16);
+
+				drawback();
 				refresh();
+				break;
+
+			case 'h':
+				if(history.size()==0)
+				{
+					mes.message("History empty.");
+					break;
+				}
+				chocho=history.size()-1;
+				weredun=true;
+				while (weredun)
+				{
+					drawback();	
+					for(int i=chocho; i>=max(0,chocho-8); i--)
+					{
+						if(i == chocho)
+							attron(COLOR_PAIR(3));
+						move(1+(chocho-i),25);
+						addstr(NToS(i).c_str());
+						if(i == chocho)
+							attroff(COLOR_PAIR(3));
+					}
+					display(history[chocho]);
+					refresh();
+					int gh = getch();
+					switch(gh)
+					{
+						case KEY_UP:
+							chocho = min(chocho+1,(int)(history.size()-1));
+							break;
+						case KEY_DOWN:
+							chocho = max(0,chocho-1);
+							break;
+						case KEY_ENTER:
+						case ' ':
+						case '\n':
+							weredun=false;
+							break;
+					}
+				}			
+				s.copyfrom(&history[chocho]);
+				drawback();display(s);refresh();
+				break;
+			case 'c':
+				hata.clear();
+				mes.message("Transposition table cleared.");
+				break;
+			case 't':
+				drawback();
+				refresh();
+				unpack_genome(whitegenome);
 				os = compute(s,0,depth, M_ROOT | M_GRAPH);
 				s.apply_move(os.optimal);
 				mes.message(moverep(os.optimal),flipcolor);
@@ -1669,6 +1825,8 @@ void GUI::runGUI()
 				while (true)
 				{
 					//message(NToS(s.movestack.size()));
+					drawback();
+					unpack_genome(whitegenome);
 					os = compute(s,0,depth,M_ROOT | M_GRAPH);
 					s.apply_move(os.optimal);
 					message(moverep(os.optimal));
@@ -1678,11 +1836,11 @@ void GUI::runGUI()
 					if((s.turn>=100) or (os.optimal[0] == SURRENDER) or (os.optimal[0] == ACCEPT_DRAW))
 						break;
 
-					drawback();display(s);refresh();
+					display(s);refresh();
 
-					s.flip();
-
-					os = compute(s,0,depth,M_ROOT);
+					drawback();s.flip();
+					unpack_genome(blackgenome);
+					os = compute(s,0,depth,M_ROOT | M_GRAPH | M_GRAPHCOLOR);
 					s.apply_move(os.optimal);
 					mes.message(moverep(os.optimal),1);
 					s.flip();
@@ -1694,7 +1852,7 @@ void GUI::runGUI()
 					if((s.turn>=100) or (os.optimal[0] == SURRENDER) or (os.optimal[0] == ACCEPT_DRAW))
 						break;
 
-					drawback();display(s);refresh();
+					display(s);refresh();
 
 
 				}
@@ -1711,7 +1869,8 @@ void GUI::runGUI()
 			case 'y':
 				refresh();
 				s.flip();
-				os = compute(s,0,depth,M_ROOT);
+				unpack_genome(blackgenome);
+				os = compute(s,0,depth,M_ROOT | M_GRAPH | M_GRAPHCOLOR);
 				s.apply_move(os.optimal);
 				flos = flipmove(os.optimal);
 				mes.message(moverep(flos),not flipcolor);
@@ -1838,6 +1997,7 @@ void GUI::runGUI()
 					move(3+i,20);
 					addstr("               ");};
 
+				drawback();display(s);refresh();
 
 				break;
 
@@ -1877,6 +2037,213 @@ void Database::generate_openings(int dd)
 	push();
 
 }
+
+//--EVOLUTION--
+
+const int POPSIZE = 15;
+const int MATCHES = 50;
+const int EVDEPTH = 7;
+
+struct Organism {
+	uint32_t genome;
+	int points;
+
+};
+
+uint32_t mutate(uint32_t genome)
+{
+
+	return (genome xor (0x00000001 << (rand()%32)));
+};
+
+bool sortorgs (Organism i,Organism j) { return (i.points<j.points); }
+
+
+void print_pop(vector<Organism> *popp)
+{
+	for (int i=0; i<(*popp).size(); i++)
+		cout << hex << ((*popp)[i].genome) << dec << " - " << (*popp)[i].points << endl;
+}
+
+uint32_t son(uint32_t f, uint32_t m)
+{
+	
+	int sec = rand()%100;
+
+	if(sec<10)
+		return f;
+	if(sec<20)
+		return m;
+
+	if(sec<80)
+	{
+		//crossover
+		int expn = rand()%32;
+		uint32_t mask = (0xFFFFFFFF <<expn);
+
+		uint32_t out = (f & mask) | (m & (~mask))  ;
+		return out;
+	}
+	//mutation
+	bool r = rand()%2;
+	return mutate(r*f + (1-r)*m);
+}
+
+int probs[16] = {
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	1,
+	1,
+	1,
+	1,
+	2,
+	2,
+	2,
+	3,
+	3,
+	4
+};
+
+void evolution()
+{
+//	unpack_genome(0xabcdef00);
+//	cout << (int)QUEENVAL << endl;
+//	exit(0);
+//	uint32_t mask = (0xFFFFFFFF <<15);
+
+//	uint32_t out = (0x11111111 & mask) | (0x222222 & (~mask))  ;
+
+//	cout << hex << out << dec << endl; 	exit(0);
+
+
+	uint32_t origen = pack_genome(PVAL,QUEENVAL,FROWVAL,CENTERVAL);
+	vector<Organism> population;
+
+	cout << "Generating initial population" << endl;
+
+	srand (static_cast <unsigned> (time(NULL)));	
+	for(int i=0; i<POPSIZE; i++)
+	{
+
+		Organism o;
+		o.genome = rand32();
+		if(true)
+			o.genome = mutate(o.genome);
+		o.points = 0;
+		population.push_back(o);
+	}
+
+
+	print_pop(&population);
+	int gennum = 0;
+	while(true)
+	{
+		cout << endl;
+		cout << "GENERATION #" << gennum << endl;
+		
+		print_pop(&population);
+		cout << endl;
+
+		for(int j=0; j<MATCHES; j++)
+		{
+			cout << "Match " << j << endl;
+			int white = rand()%population.size();
+			int black = rand()%population.size();
+			if (black == white)
+				black = (black+1)%population.size();
+			cout << white << " against " << black << endl;
+
+			State s;
+			s.setup();
+			hata.clear();
+
+			int win = 0;
+
+			for(int trun = 0; trun <= 50; trun ++)
+			{
+				cout << "#" << flush;
+			
+				unpack_genome(population[white].genome);	
+				strategy os = compute(s,0,EVDEPTH,M_ROOT);
+				
+				if(os.optimal[0] == SURRENDER)
+				{
+					win = -1;break;
+				}
+
+				if(os.optimal[0] == ACCEPT_DRAW)
+				{
+					win = 0;break;
+				}
+
+				s.apply_move(os.optimal);
+
+				s.flip();
+
+				unpack_genome(population[black].genome);
+				os = compute(s,0,EVDEPTH,M_ROOT);
+				
+				if(os.optimal[0] == SURRENDER)
+				{
+					win = 1;break;
+				}
+
+				if(os.optimal[0] == ACCEPT_DRAW)
+				{
+					win = 0;break;
+				}
+
+				s.apply_move(os.optimal);
+
+				s.flip();
+
+				if (s.turn>=100)
+				{
+					win=0;break;
+				}
+
+				//if((s.turn>=100) or (os.optimal[0] == SURRENDER) or (os.optimal[0] == ACCEPT_DRAW))
+                                                
+			}
+			cout << endl;
+
+			cout << "Win status: " << win << endl;
+		
+			population[white].points += win;
+			population[black].points -= win;
+
+			cout << endl;
+
+//			print_pop(&population);
+
+		}
+
+
+		sort(population.begin(),population.end(),sortorgs);
+		print_pop(&population);
+		uint32_t father,mother;
+		vector<Organism> newpop;
+		for (int i=0; i<population.size(); i++)
+		{	
+			int ps = population.size();
+			father = population[ps - 1 - pow(rand()%ps,2)/ps ].genome; //population[population.size()-1-(rand()%3)].genome;
+			mother = population[ps - 1 - pow(rand()%ps,2)/ps ].genome;//population[population.size()-2-(rand()%3)].genome;
+			Organism newborn;
+			newborn.genome = son(father,mother);
+			newborn.points = 0;
+			newpop.push_back(newborn);
+		}
+		population = newpop;
+	
+		gennum++;
+	}
+}
+
+
 
 void TEST_database()
 {
@@ -1935,6 +2302,12 @@ int main(int ac, char* av[])
 	if(vm.count("ptest"))
 	{
 		TEST_profiling();
+		exit(0);
+	}
+
+	if(vm.count("evolution"))
+	{
+		evolution();
 		exit(0);
 	}
 

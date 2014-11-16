@@ -1429,6 +1429,8 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode=M_RO
 
 //-------GUI--------
 
+const int MAXGUIDEPTH = 14;
+
 void playagainst()
 {
 	State s;
@@ -1874,7 +1876,7 @@ void GUI::runGUI()
 				message("Depth lowered to "+NToS(depth));
 				break;
 			case 'd':
-				depth = min(12, depth+1);
+				depth = min(MAXGUIDEPTH, depth+1);
 				message("Depth raised to "+NToS(depth));
 				break;
 			case 'y':

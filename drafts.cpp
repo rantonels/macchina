@@ -326,6 +326,8 @@ const char SJUMP[32][4] = {
 
 };
 
+
+
 char cellascii(Cell c)
 {
 	switch(c)
@@ -550,7 +552,7 @@ Move mpair(char from, char to)
 	return m;
 }
 
-bool isbeatable(int nlen, char other)
+bool isbeatable(int nlen, Cell other)
 {
 	if (other == BLACK)
 		return true;
@@ -561,6 +563,10 @@ bool isbeatable(int nlen, char other)
 
 }
 
+bool isblack(Cell cc)
+{
+	return (not(cc & 0x01)) and (cc > 0);
+}
 
 struct jumppos {
 	char cell;
@@ -572,6 +578,9 @@ vector<Move> State::raw_movelist()
 {
 
 	vector<Move> outlist;
+	outlist.reserve(7);
+
+	
 
 	//generazione salti
 	for (int i=0;i<32;i++)
@@ -588,13 +597,13 @@ vector<Move> State::raw_movelist()
 			for (int j=0;j<nlen;j++)
 			{
 				if(nlen==2)
-					if ((data[FORW[i][j]] == BLACK) or (data[FORW[i][j]] == BQUEEN))
+					if (isblack(data[FORW[i][j]])) //((data[FORW[i][j]] == BLACK) or (data[FORW[i][j]] == BQUEEN))
 					{tuttoinutile = false; break;}
 				if (nlen==4)
-					if ((data[KING[i][j]] == BLACK) or (data[KING[i][j]]== BQUEEN))
+					if (isblack(data[KING[i][j]]))
 					{tuttoinutile = false;break;}
-				if ((nlen!=2) and (nlen!=4))
-					cout << "WARNING: unvalid piece has leaked into preliminary check" << endl;
+			//	if ((nlen!=2) and (nlen!=4))
+			//		cout << "WARNING: unvalid piece has leaked into preliminary check" << endl;
 			}
 			if (tuttoinutile)
 				continue;
@@ -725,6 +734,7 @@ vector<Move> State::raw_movelist()
 			{
 				//		cout << "* ricostruisco dalla cella" << cellrep(leaf->cell) << endl;
 				Move m;
+				m.reserve(jtree.depth(leaf)+1);
 				tree<jumppos>::iterator backtrans = leaf;
 				while (true)				
 				{
@@ -837,7 +847,7 @@ class Database {
 	public:
 		dbtype db;
 		Database();
-		strategy query(State s);
+		strategy query(State *s);
 		void insert(State s, char depth, strategy strat, bool force);
 		void push();
 		void pull();
@@ -845,12 +855,12 @@ class Database {
 
 } database;
 
-strategy Database::query(State s)
+strategy Database::query(State *s)
 {
 	strategy outs;
 	array<Cell,32> ar;
 	for (int i=0; i<32; i++)
-		ar[i] = s.data[i];
+		ar[i] = s->data[i];
 
 
 	dbtype::iterator it = db.find(ar);
@@ -1075,12 +1085,13 @@ int State::value_function()
 	b = 0;n=0;
 	for (int i=0; i<32; i++)
 	{
+		Cell d = data[i];
 		//conteggio bianchi
-		tmp = (PIECEVAL+FROWVAL*((i/4)==7))*(data[i] == WHITE) + QUEENVAL*(data[i] == WQUEEN);
+		tmp = (PIECEVAL+FROWVAL*((i/4)==7))*(d == WHITE) + QUEENVAL*(d == WQUEEN);
 		b += 10*tmp + CENTERVAL*center(i%4)*(tmp/10); //moltiplica per 1.1
 
 		//conteggio neri
-		tmp = (PIECEVAL+FROWVAL*((i/4)==0))*(data[i] == BLACK) + QUEENVAL*(data[i] == BQUEEN);
+		tmp = (PIECEVAL+FROWVAL*((i/4)==0))*(d == BLACK) + QUEENVAL*(d == BQUEEN);
 		n += 10*tmp + CENTERVAL*center(i%4)*(tmp/10); //moltiplica per 1.1
 	}	
 
@@ -1179,19 +1190,19 @@ const unsigned char	M_GRAPHCOLOR=0x04;
 
 //la funzione ritorna il punteggio stimato sempre per il giocatore turn!
 
-strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROOT, float alphabetalim=-INFTY)
+strategy compute( State *original, bool turn, int depth, unsigned char mode=M_ROOT, float alphabetalim=-INFTY)
 {
 	//cout << "depth: " << depth << endl;
 	//la board e' flippata da dopo l'ingresso a dopo la generazione delle mosse
 	if (turn==1) //turn == 0 bianco; turn == 1 nero
-		original.flip();
+		original->flip();
 
 
 	//se siamo su una foglia dell'albero di iterazione
 	if (depth==0)
 	{
 		strategy s;
-		s.value = original.value_function(); //le valutazioni sono fatte sulla board flippata e dunque valgono per turn
+		s.value = original->value_function(); //le valutazioni sono fatte sulla board flippata e dunque valgono per turn
 		return s;
 	}
 
@@ -1228,7 +1239,7 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 
 		//cout << "pronto per la ricerca in ht..." << endl;
 		//ricerca in hashtable
-		uint32_t h = hata.hash(&original);
+		uint32_t h = hata.hash(original);
 		if((hata.table[h%TTBSIZE].active) and (hata.table[h%TTBSIZE].depth >= depth) and (hata.table[h%TTBSIZE].hash == h) )
 		{
 
@@ -1244,7 +1255,7 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 
 
 	//generazione movestack
-	vector<Move> ls = original.raw_movelist();
+	vector<Move> ls = original->raw_movelist();
 
 	//cout << "moveset generated" << endl;
 
@@ -1252,7 +1263,7 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 	if (ls.size() == 0) //movearray vuoto vuol dire o perdita o stallo
 	{
 		strategy s;
-		s.value = original.value_function();
+		s.value = original->value_function();
 		if (s.value != - INFTY) //se non abbiamo perso, deve essere stallo
 		{
 			s.value = 0; //lo stallo ha punteggio 0
@@ -1299,7 +1310,7 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 		{
 			int countpiec = 0;
 			for (int o=0; o<32; o++)
-				countpiec += (original.data[o] != VOID);
+				countpiec += (original->data[o] != VOID);
 
 			points[i] = 50*(countpiec>8);
 		}
@@ -1307,14 +1318,14 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 		{
 			State tmp;
 			//copy original->tmp
-			tmp.copyfrom(&original);
+			tmp.copyfrom(original);
 
 			tmp.apply_move(ls[i]);
 			if (turn)
 				tmp.flip();
 
 
-			strategy strat = compute(tmp, not turn, depth-1, 0 ,-abcounter);
+			strategy strat = compute(&tmp, not turn, depth-1, 0 ,-abcounter);
 			points[i] = strat.value;
 
 			//update contatore di alfa-beta
@@ -1374,12 +1385,12 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 	int dcountb = 0;
 	for (int i=0; i<32; i++)
 	{
-		if ((original.data[i] == WHITE))
+		if ((original->data[i] == WHITE))
 		{ dcountw = -1; break;}
 
-		if(original.data[i] == WQUEEN)
+		if(original->data[i] == WQUEEN)
 			dcountw ++;
-		if(original.data[i] == BQUEEN)
+		if(original->data[i] == BQUEEN)
 			dcountb ++;
 	}
 	if (dcountw != -1)
@@ -1399,7 +1410,7 @@ strategy compute( State original, bool turn, int depth, unsigned char mode=M_ROO
 
 	//salva la strategia nell'hashtable
 	//cout << "pronto per il salvataggio nell'ht..." << endl;
-	uint32_t h = hata.hash(&original);
+	uint32_t h = hata.hash(original);
 	if( (not(hata.table[h%TTBSIZE].active)) or (hata.table[h%TTBSIZE].depth < depth) )
 	{
 		hata.table[h%TTBSIZE].active = true;
@@ -1436,7 +1447,7 @@ void playagainst()
 
 		s.flip();
 		cout << "Thinking..." << endl;
-		strategy os = compute(s,0,7);
+		strategy os = compute(&s,0,7);
 		s.apply_move(os.optimal);
 		s.flip();
 
@@ -1452,7 +1463,7 @@ void compvscomp(int wdepth, int bdepth)
 	{
 		s.drawascii();
 		cout << "computing white move" << endl;
-		strategy os = compute(s,0,wdepth);
+		strategy os = compute(&s,0,wdepth);
 		if(os.optimal[0] == SURRENDER)
 		{
 			cout << "White surrenders." << endl;
@@ -1465,7 +1476,7 @@ void compvscomp(int wdepth, int bdepth)
 
 		s.flip();
 		cout << "computing black move" << endl;
-		os = compute(s,0,bdepth);
+		os = compute(&s,0,bdepth);
 		if(os.optimal[0] == SURRENDER)
 		{
 			cout << "Black surrenders." << endl;
@@ -1813,7 +1824,7 @@ void GUI::runGUI()
 				drawback();
 				refresh();
 				unpack_genome(whitegenome);
-				os = compute(s,0,depth, M_ROOT | M_GRAPH);
+				os = compute(&s,0,depth, M_ROOT | M_GRAPH);
 				s.apply_move(os.optimal);
 				mes.message(moverep(os.optimal),flipcolor);
 				refresh();
@@ -1827,7 +1838,7 @@ void GUI::runGUI()
 					//message(NToS(s.movestack.size()));
 					drawback();
 					unpack_genome(whitegenome);
-					os = compute(s,0,depth,M_ROOT | M_GRAPH);
+					os = compute(&s,0,depth,M_ROOT | M_GRAPH);
 					s.apply_move(os.optimal);
 					message(moverep(os.optimal));
 					if (s.turn>=100)
@@ -1840,7 +1851,7 @@ void GUI::runGUI()
 
 					drawback();s.flip();
 					unpack_genome(blackgenome);
-					os = compute(s,0,depth,M_ROOT | M_GRAPH | M_GRAPHCOLOR);
+					os = compute(&s,0,depth,M_ROOT | M_GRAPH | M_GRAPHCOLOR);
 					s.apply_move(os.optimal);
 					mes.message(moverep(os.optimal),1);
 					s.flip();
@@ -1870,7 +1881,7 @@ void GUI::runGUI()
 				refresh();
 				s.flip();
 				unpack_genome(blackgenome);
-				os = compute(s,0,depth,M_ROOT | M_GRAPH | M_GRAPHCOLOR);
+				os = compute(&s,0,depth,M_ROOT | M_GRAPH | M_GRAPHCOLOR);
 				s.apply_move(os.optimal);
 				flos = flipmove(os.optimal);
 				mes.message(moverep(flos),not flipcolor);
@@ -2028,7 +2039,7 @@ void Database::generate_openings(int dd)
 
 		s.flip();
 
-		strategy outo = compute(s,0,dd,M_ROOT);	
+		strategy outo = compute(&s,0,dd,M_ROOT);	
 
 		insert(s,dd,outo,true);
 
@@ -2168,7 +2179,7 @@ void evolution()
 				cout << "#" << flush;
 			
 				unpack_genome(population[white].genome);	
-				strategy os = compute(s,0,EVDEPTH,M_ROOT);
+				strategy os = compute(&s,0,EVDEPTH,M_ROOT);
 				
 				if(os.optimal[0] == SURRENDER)
 				{
@@ -2185,7 +2196,7 @@ void evolution()
 				s.flip();
 
 				unpack_genome(population[black].genome);
-				os = compute(s,0,EVDEPTH,M_ROOT);
+				os = compute(&s,0,EVDEPTH,M_ROOT);
 				
 				if(os.optimal[0] == SURRENDER)
 				{
@@ -2257,7 +2268,7 @@ void TEST_database()
 
 	State s;
 	s.setup();
-	strategy ls = compute(s,0,5,M_ROOT);
+	strategy ls = compute(&s,0,5,M_ROOT);
 	s.apply_move(ls.optimal);
 	s.drawascii();	
 }
@@ -2279,7 +2290,7 @@ void TEST_profiling()
 	for(int i=0;i<3;i++)
 		s.apply_move(s.raw_movelist()[0]);
 	cout << "Computin'" << endl;
-	strategy ss = compute(s,0,5,M_ROOT);
+	strategy ss = compute(&s,0,5,M_ROOT);
 	cout << "Done." << endl;
 
 

@@ -210,6 +210,7 @@ Move parsemove(string ss)
 //infinito
 
 const int INFTY = INT_MAX;
+const int INFTIME = INT_MAX - 1;
 
 //lookup table per gli spostamenti in avanti di uno
 
@@ -365,7 +366,14 @@ class State {
 		void apply_move(Move m);
 		void flip();
 		int value_function();
+		void random();
 };
+
+void State::random()
+{
+	for(int i=0; i<32; i++)
+		data[i] = (rand()%5)*(rand()%2)*(rand()%2);
+}
 
 void State::copyfrom(State* s)
 {
@@ -503,11 +511,11 @@ char flipdame(char d)
 	return fliplookup[d];
 	//switch(d)
 	//{
-		//case VOID: return VOID;break;
-		//case WHITE: return BLACK;break;
-		//case BLACK: return WHITE;break;
-		//case WQUEEN: return BQUEEN;break;
-		//case BQUEEN: return WQUEEN;break;
+	//case VOID: return VOID;break;
+	//case WHITE: return BLACK;break;
+	//case BLACK: return WHITE;break;
+	//case WQUEEN: return BQUEEN;break;
+	//case BQUEEN: return WQUEEN;break;
 	//};
 	//return VOID;
 }
@@ -516,9 +524,9 @@ void State::flip()
 {
 	//char tmp[32];
 	//for (int i=0; i<32; i++)
-		//tmp[i] = data[31-i];
+	//tmp[i] = data[31-i];
 	//for (int j=0; j<32; j++)
-		//data[j] = (Cell)flipdame(tmp[j]);
+	//data[j] = (Cell)flipdame(tmp[j]);
 
 	char tmp;
 	for (int i=0; i<16; i++)
@@ -580,7 +588,7 @@ vector<Move> State::raw_movelist()
 	vector<Move> outlist;
 	outlist.reserve(7);
 
-	
+
 
 	//generazione salti
 	for (int i=0;i<32;i++)
@@ -602,8 +610,8 @@ vector<Move> State::raw_movelist()
 				if (nlen==4)
 					if (isblack(data[KING[i][j]]))
 					{tuttoinutile = false;break;}
-			//	if ((nlen!=2) and (nlen!=4))
-			//		cout << "WARNING: unvalid piece has leaked into preliminary check" << endl;
+				//	if ((nlen!=2) and (nlen!=4))
+				//		cout << "WARNING: unvalid piece has leaked into preliminary check" << endl;
 			}
 			if (tuttoinutile)
 				continue;
@@ -1013,9 +1021,9 @@ unsigned char CENTERVAL = 1;
 uint32_t pack_genome(char PV,char QUEENV, char FROMV, char CENTERV)
 {
 	uint32_t out =	 (int)PV +
-			((int)QUEENV	<< 8) +
-			((int)FROMV	<< 16) +
-			((int)CENTERV << 24);
+		((int)QUEENV	<< 8) +
+		((int)FROMV	<< 16) +
+		((int)CENTERV << 24);
 	return out;
 }
 
@@ -1071,18 +1079,19 @@ int State::value_function()
 			bsum += (data[i]==BLACK)+2*(data[i]==BQUEEN);
 		}
 		if (wsum>bsum)
-			return INFTY;
+			return INFTIME;
 		else
 			if(bsum>wsum)
-				return -INFTY;
+				return -INFTIME;
 			else
 				return 0;
 
 	}
 
 	int val = 0;
-	int b,n;int tmp;
-	b = 0;n=0;
+	int b=0;
+	int n=0;
+	int tmp;
 	for (int i=0; i<32; i++)
 	{
 		Cell d = data[i];
@@ -1113,7 +1122,7 @@ int State::value_function()
 
 //--TRANSPOSITION TABLE--
 
-const int TTBSIZE = 32768;
+const int TTBSIZE = 65536;
 
 struct htentry {
 	bool active;
@@ -1227,11 +1236,13 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode=M_RO
 			return res;
 		}
 
+
+		//pulizia auto HT
 		if (hata.accesscounter >= (TTBSIZE>>2))
 		{
 			hata.clear();
 		}
- 
+
 	}
 	else
 	{
@@ -1285,7 +1296,7 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode=M_RO
 	//preparazione display mosse
 	if((mode & M_GRAPH) == M_GRAPH)
 	{
-		
+
 		char col = ((mode & M_GRAPHCOLOR) == M_GRAPHCOLOR);
 		attron(COLOR_PAIR(col));
 		for (int i=0; i<20; i++){
@@ -1375,37 +1386,41 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode=M_RO
 	//	cout << "points: " << out.value << endl;
 
 	//se si perde in ogni caso, la mossa è arrendersi
-	if (out.value <= -INFTY)
+	if (out.value <= -INFTIME)
 	{
 		out.optimal[0] = SURRENDER;
 	}
 
-	//conteggio endgame sole dame
-	int dcountw = 0;
-	int dcountb = 0;
-	for (int i=0; i<32; i++)
+
+	if (out.value < INFTIME) //se è sicuro di vincere, non dovrebbe proporre la patta
 	{
-		if ((original->data[i] == WHITE))
-		{ dcountw = -1; break;}
+		//conteggio endgame sole dame
+		int dcountw = 0;
+		int dcountb = 0;
+		for (int i=0; i<32; i++)
+		{
+			if ((original->data[i] == WHITE))
+			{ dcountw = -1; break;}
 
-		if(original->data[i] == WQUEEN)
-			dcountw ++;
-		if(original->data[i] == BQUEEN)
-			dcountb ++;
-	}
-	if (dcountw != -1)
-	{
-		bool adddraw=false;
+			if(original->data[i] == WQUEEN)
+				dcountw ++;
+			if(original->data[i] == BQUEEN)
+				dcountb ++;
+		}
+		if (dcountw != -1)
+		{
+			bool adddraw=false;
 
-		if ((dcountw <= 3) and (dcountw<=dcountb))
-			adddraw = true;
-
-		if ((dcountw <= 3) and (dcountb <= 3) and (abs(dcountw - dcountb)<=1))
-			if (out.value <= 0) //a meno che non sia sicuro di passare in vantaggio
+			if ((dcountw <= 3) and (dcountw<=dcountb))
 				adddraw = true;
 
-		if (adddraw)	
-			out.optimal.push_back(PROPOSE_DRAW);
+			if ((dcountw <= 3) and (dcountb <= 3) and (abs(dcountw - dcountb)<=1))
+				if (out.value <= 0) //a meno che non sia sicuro di passare in vantaggio
+					adddraw = true;
+
+			if (adddraw)	
+				out.optimal.push_back(PROPOSE_DRAW);
+		}
 	}
 
 	//salva la strategia nell'hashtable
@@ -1696,7 +1711,7 @@ void display(State s)
 
 void GUI::runGUI()
 {
-//	unpack_genome(0x0E07D719); //lucky fellow!
+	//	unpack_genome(0x0E07D719); //lucky fellow!
 	uint32_t gen_default = pack_genome(PVAL,QUEENVAL,FROWVAL,CENTERVAL);
 
 	whitegenome = gen_default;
@@ -1726,7 +1741,7 @@ void GUI::runGUI()
 
 	while(exitall)
 	{
-//		drawback();
+		//		drawback();
 		display(s);
 		refresh();
 		char c = getch();
@@ -1765,7 +1780,7 @@ void GUI::runGUI()
 				getstr(instr);
 				noecho();
 				whitegenome = (uint32_t)strtol(instr, NULL, 16);
-	
+
 				echo();
 				move(5,40);
 				getstr(instr);
@@ -2080,7 +2095,7 @@ void print_pop(vector<Organism> *popp)
 
 uint32_t son(uint32_t f, uint32_t m)
 {
-	
+
 	int sec = rand()%100;
 
 	if(sec<10)
@@ -2123,14 +2138,14 @@ int probs[16] = {
 
 void evolution()
 {
-//	unpack_genome(0xabcdef00);
-//	cout << (int)QUEENVAL << endl;
-//	exit(0);
-//	uint32_t mask = (0xFFFFFFFF <<15);
+	//	unpack_genome(0xabcdef00);
+	//	cout << (int)QUEENVAL << endl;
+	//	exit(0);
+	//	uint32_t mask = (0xFFFFFFFF <<15);
 
-//	uint32_t out = (0x11111111 & mask) | (0x222222 & (~mask))  ;
+	//	uint32_t out = (0x11111111 & mask) | (0x222222 & (~mask))  ;
 
-//	cout << hex << out << dec << endl; 	exit(0);
+	//	cout << hex << out << dec << endl; 	exit(0);
 
 
 	uint32_t origen = pack_genome(PVAL,QUEENVAL,FROWVAL,CENTERVAL);
@@ -2157,7 +2172,7 @@ void evolution()
 	{
 		cout << endl;
 		cout << "GENERATION #" << gennum << endl;
-		
+
 		print_pop(&population);
 		cout << endl;
 
@@ -2179,10 +2194,10 @@ void evolution()
 			for(int trun = 0; trun <= 50; trun ++)
 			{
 				cout << "#" << flush;
-			
+
 				unpack_genome(population[white].genome);	
 				strategy os = compute(&s,0,EVDEPTH,M_ROOT);
-				
+
 				if(os.optimal[0] == SURRENDER)
 				{
 					win = -1;break;
@@ -2199,7 +2214,7 @@ void evolution()
 
 				unpack_genome(population[black].genome);
 				os = compute(&s,0,EVDEPTH,M_ROOT);
-				
+
 				if(os.optimal[0] == SURRENDER)
 				{
 					win = 1;break;
@@ -2220,18 +2235,18 @@ void evolution()
 				}
 
 				//if((s.turn>=100) or (os.optimal[0] == SURRENDER) or (os.optimal[0] == ACCEPT_DRAW))
-                                                
+
 			}
 			cout << endl;
 
 			cout << "Win status: " << win << endl;
-		
+
 			population[white].points += win;
 			population[black].points -= win;
 
 			cout << endl;
 
-//			print_pop(&population);
+			//			print_pop(&population);
 
 		}
 
@@ -2251,7 +2266,7 @@ void evolution()
 			newpop.push_back(newborn);
 		}
 		population = newpop;
-	
+
 		gennum++;
 	}
 }
@@ -2281,6 +2296,17 @@ void TEST_hashtable()
 	State s;
 	s.setup();
 	cout << hata.hash(&s) << endl;
+
+
+	while(true)
+	{
+		s.random();
+		s.drawascii();
+	
+		cout << "value: " << s.value_function() << endl;
+
+	};
+
 }
 
 void TEST_profiling()
@@ -2300,6 +2326,8 @@ void TEST_profiling()
 
 int main(int ac, char* av[])
 {
+//	TEST_hashtable();exit(0);
+
 	//	setlocale(LC_CTYPE,"C-UTF-8");
 	parse_options(ac,av);
 

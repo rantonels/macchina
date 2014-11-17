@@ -61,6 +61,19 @@ uint32_t rand32(){
 	return x;
 }
 
+int log2(int n)
+{
+	int t = n;
+
+	if(t==0)
+		return -1;
+
+	int out = 0;
+	while(t>>=1)
+		++out;
+	return out;
+}
+
 //PARAMETRI GLOBALI
 
 const int MAXSTACKSIZE = 30; //dimensione massima stack di mosse di sicurezza per evitare ripetizioni
@@ -1311,6 +1324,15 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode=M_RO
 		return s;
 	}
 
+	//se c'e' una sola mossa
+	if ( ((mode & M_ROOT) == M_ROOT) and (ls.size() == 1))
+	{
+		strategy s;
+		s.value = 0;
+		s.optimal = ls[0];
+		return s;
+	}
+
 	//cout << "beyond no moves" << endl;
 
 	//contatore di alfa-beta
@@ -1332,11 +1354,19 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode=M_RO
 		char col = ((mode & M_GRAPHCOLOR) == M_GRAPHCOLOR);
 		attron(COLOR_PAIR(col));
 		for (int i=0; i<20; i++){
-			move(1+i,20);
-			addstr("                   ");};
+			move(1+i,17);
+			addstr("                      ");};
 
 		for (int i=0; i<ls.size(); i++)
 		{
+			move(1+i,17);
+			int hval = hheur.value[ls[i].front()][ls[i].back()];
+			if (hval>0)
+			{
+				char bufff[2];
+				sprintf(bufff,"%2d",log2(hval));
+				addstr(bufff);
+			}
 			move(1+i,27);
 			addstr(moverep(ls[i]).c_str());
 		};

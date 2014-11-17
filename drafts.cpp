@@ -825,6 +825,33 @@ vector<Move> State::raw_movelist()
 	return outlist;
 }
 
+//HISTORY EURISTIC
+
+class Hheur {
+	public:
+		uint32_t value[64][64];
+
+		Hheur();
+		void clear();
+} hheur;
+
+void Hheur::clear()
+{
+	for(int i=0;i<64;i++)
+		for(int j=0;j<64;j++)
+			value[i][j] = 0;
+}
+
+Hheur::Hheur()
+{
+	clear();
+}
+
+uint32_t evalhheur (Move m) { return hheur.value[m.front()][m.back()]; }
+
+bool sorthheur (Move i, Move j) { return (evalhheur(i)>evalhheur(j)); }
+
+
 //----DB IN/OUT--------
 
 const char* DBFILE = "db/database";
@@ -1293,6 +1320,11 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode=M_RO
 	float * points;
 	points = new float[ls.size()];
 
+	//history heuristic sort
+	sort(ls.begin(),ls.end(),sorthheur);
+
+	
+
 	//preparazione display mosse
 	if((mode & M_GRAPH) == M_GRAPH)
 	{
@@ -1345,7 +1377,13 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode=M_RO
 
 			//tronca se alfa-beta
 			if (points[i]<alphabetalim)
-			{ 		break;}
+			{ 	//CUTOFF	
+				//cout << "LOL" << endl;
+				//cout << moverep(ls[i]) << endl;
+				//exit(0);
+				hheur.value[ls[i].front()][ls[i].back()] += (0x000001 << (depth));
+				break;
+			}
 		}
 
 		//update display
@@ -1770,6 +1808,7 @@ void GUI::runGUI()
 			case 'r':
 				s.setup();
 				hata.clear();
+				hheur.clear();
 				drawback();display(s);
 				mes.message("Board reset.");
 				break;
@@ -1835,7 +1874,8 @@ void GUI::runGUI()
 				break;
 			case 'c':
 				hata.clear();
-				mes.message("Transposition table cleared.");
+				hheur.clear();
+				mes.message("Transposition table and refutation history cleared.");
 				break;
 			case 't':
 				drawback();

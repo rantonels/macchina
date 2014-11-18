@@ -9,7 +9,7 @@ INC := -I include
 
 LIB := -lncurses -lboost_program_options
 
-all: $(TARGET)
+all: drafts
 
 
 $(BUILDDIR)/boardrep.o : $(SRCDIR)/boardrep.cpp $(SRCDIR)/boardrep.h
@@ -21,8 +21,11 @@ $(BUILDDIR)/drafts.o : $(SRCDIR)/drafts.cpp $(SRCDIR)/boardrep.h
 $(TARGET): $(BUILDDIR)/drafts.o $(BUILDDIR)/boardrep.o
 	$(CC) $(CFLAGS) $(BUILDDIR)/drafts.o $(BUILDDIR)/boardrep.o -o $(TARGET) $(INC) $(LIB)
 
+drafts : $(TARGET)
+	cp $(TARGET) drafts
+
 #profile: $(SRCDIR)/drafts.cpp
 #	$(CC) -pg -std=c++11 -O3 $(SRCDIR)/drafts.cpp -o $(TARGET)_profiling $(INC) $(LIB)
 
 clean:
-	rm -f bin/* $(BUILDDIR)/*
+	rm -f drafts bin/* $(BUILDDIR)/*

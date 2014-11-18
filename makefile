@@ -1,13 +1,21 @@
 .PHONY: all profile clean
 
-all: drafts drafts_profiling
+CC := g++
+SRCDIR := src
+BUILDDIR := build
+TARGET := build/drafts
+INC := -I include
 
-drafts: drafts.cpp
-	g++ -std=c++11 -O3 -lncurses -lboost_program_options drafts.cpp -o drafts
+LIB := -lncurses -lboost_program_options
 
-drafts_profiling: drafts.cpp
-	g++ -pg -std=c++11 -O3 -lncurses -lboost_program_options drafts.cpp -o drafts_profiling
+all: $(TARGET) profile
+
+$(TARGET): $(SRCDIR)/drafts.cpp
+	$(CC) -std=c++11 -O3 $(SRCDIR)/drafts.cpp -o $(TARGET) $(INC) $(LIB)
+
+profile: $(SRCDIR)/drafts.cpp
+	$(CC) -pg -std=c++11 -O3 $(SRCDIR)/drafts.cpp -o $(TARGET)_profiling $(INC) $(LIB)
 
 clean:
-	rm -f drafts drafts_profiling analysis.txt gmon.out
+	rm -f drafts drafts_profiling analysis.txt gmon.out $(BUILDDIR)/*
 

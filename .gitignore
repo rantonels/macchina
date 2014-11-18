@@ -24,3 +24,10 @@ analysis.txt
 *.exe
 *.out
 *.app
+
+# Ignore build dir
+build
+# Ignore binaries
+bin/*
+# Ignore database
+db

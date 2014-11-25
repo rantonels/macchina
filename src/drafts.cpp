@@ -63,7 +63,7 @@ void parse_options(int ac, char* av[]){
 
 #include "engine.h"
 
-
+#include "graphics.h"
  
 
 string elapsedrep(double letime)
@@ -268,7 +268,7 @@ void GUI::drawback()
 }
 
 
-void display(State s)
+void display(State * s, bool flip = false)
 {
 	int startx = 4;
 	int starty = 3;
@@ -284,7 +284,7 @@ void display(State s)
 	for(int i=0; i<32;i++)
 	{
 		move(starty + i/4, startx + 2*(i%4) + ((i/4)+1)%2 );
-		switch(s.data[i])
+		switch(s->data[i])
 		{
 			case VOID:
 
@@ -320,17 +320,17 @@ void display(State s)
 
 	}
 
-	if (s.draw)
+	if (s->draw)
 	{
 		move(starty+8,startx-2);
 		addstr("DRAW PROPOSED");
 	};
 
-	if(s.turn<100)
+	if(s->turn<100)
 	{
 		move(starty-2,startx+3);
 		char buf[3];
-		sprintf(buf,"%2d",(int)s.turn);
+		sprintf(buf,"%2d",(int)s->turn);
 		addstr(buf);
 	}
 	else
@@ -339,6 +339,8 @@ void display(State s)
 		addstr("TIMEOUT");
 	}
 
+	graphBoard(s,flip);
+	graphRefresh();
 }
 
 //GENOMI
@@ -357,6 +359,7 @@ void GUI::runGUI()
 	whitegenome = gen_default;
 	blackgenome = gen_default;
 
+	//init ncurses
 	initscr();
 
 	start_color();			
@@ -369,6 +372,11 @@ void GUI::runGUI()
 	noecho();
 	keypad(stdscr,true);
 
+	//init graphical board
+	startupWindow();
+
+
+	
 	drawback();
 
 	State s;
@@ -382,7 +390,7 @@ void GUI::runGUI()
 	while(exitall)
 	{
 		//		drawback();
-		display(s);
+		display(&s,flipcolor);
 		refresh();
 		char c = getch();
 		strategy os;
@@ -411,7 +419,7 @@ void GUI::runGUI()
 				s.setup();
 				hata.clear();
 				hheur.clear();
-				drawback();display(s);
+				drawback();display(&s,flipcolor);
 				mes.message("Board reset.");
 				break;
 			case 'g':
@@ -453,7 +461,7 @@ void GUI::runGUI()
 						if(i == chocho)
 							attroff(COLOR_PAIR(3));
 					}
-					display(history[chocho]);
+					display(&history[chocho],flipcolor);
 					refresh();
 					int gh = getch();
 					switch(gh)
@@ -472,7 +480,7 @@ void GUI::runGUI()
 					}
 				}			
 				s.copyfrom(&history[chocho]);
-				drawback();display(s);refresh();
+				drawback();display(&s,flipcolor);refresh();
 				break;
 			case 'c':
 				hata.clear();
@@ -507,7 +515,7 @@ void GUI::runGUI()
 					if((s.turn>=100) or (os.optimal[0] == SURRENDER) or (os.optimal[0] == ACCEPT_DRAW))
 						break;
 
-					display(s);refresh();
+					display(&s,flipcolor);refresh();
 
 					drawback();s.flip();
 					unpack_genome(blackgenome);
@@ -523,11 +531,11 @@ void GUI::runGUI()
 					if((s.turn>=100) or (os.optimal[0] == SURRENDER) or (os.optimal[0] == ACCEPT_DRAW))
 						break;
 
-					display(s);refresh();
+					display(&s,flipcolor);refresh();
 
 
 				}
-				display(s);refresh();
+				display(&s,flipcolor);refresh();
 				break;
 			case 's':
 				depth = max(2,depth-1);
@@ -560,7 +568,7 @@ void GUI::runGUI()
 				}
 				while(not chosen)
 				{
-					display(s);
+					display(&s,flipcolor);
 					moveton(curpos);
 					attron(COLOR_PAIR(3));
 					addch('E');
@@ -602,7 +610,9 @@ void GUI::runGUI()
 				//	message("Choose move.");
 				while (not chosen)
 				{
-					display(s);
+					display(&s,flipcolor);
+					graphPointers(lsf[choice]);
+					graphRefresh();
 					moveton(lsf[choice].back());
 					attron(COLOR_PAIR(3));
 					addch('X');
@@ -669,7 +679,7 @@ void GUI::runGUI()
 					move(3+i,20);
 					addstr("               ");};
 
-				drawback();display(s);refresh();
+				drawback();display(&s,flipcolor);refresh();
 
 				break;
 
@@ -680,6 +690,7 @@ void GUI::runGUI()
 	}
 
 	endwin();
+	graphCleanup();
 }
 
 void Database::generate_openings(int dd)
@@ -968,8 +979,29 @@ void TEST_profiling()
 
 }
 
+void TEST_graphics()
+{
+
+	cout << "Beginning graphics test" << endl;
+
+	startupWindow();
+	
+	
+	State s;
+	s.setup();
+	
+	graphBoard(&s);
+	graphRefresh();
+
+	sleep(3);
+	
+	graphCleanup();
+	
+}
+
 int main(int ac, char* av[])
 {
+//	TEST_graphics(); exit(0);
 //	TEST_hashtable();exit(0);
 
 	//	setlocale(LC_CTYPE,"C-UTF-8");

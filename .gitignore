@@ -29,5 +29,3 @@ analysis.txt
 build
 # Ignore binaries
 bin/*
-# Ignore database
-db

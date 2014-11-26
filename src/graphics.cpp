@@ -49,7 +49,7 @@ void startupWindow()
 	
 	cout << "- loading spritesheet..." << endl;
 	
-	SDL_Surface* loads = SDL_LoadBMP( "img/spritesheet.bmp" );
+	SDL_Surface* loads = IMG_Load( "img/spritesheet.png" );
 	if (loads == NULL)
 	{
 		cout << "ERROR LOADING img/spritesheet.bmp: " << IMG_GetError() << endl;

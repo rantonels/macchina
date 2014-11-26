@@ -159,19 +159,54 @@ void moveton(char n)
 	move(y,x);
 };
 
+//MESSAGES
+
+const string currentDateTime() {		// da http://stackoverflow.com/questions/997946/how-to-get-current-time-and-date-in-c
+    time_t     now = time(0);
+    struct tm  tstruct;
+    char       buf[80];
+    tstruct = *localtime(&now);
+    // Visit http://en.cppreference.com/w/cpp/chrono/c/strftime
+    // for more information about date/time format
+    strftime(buf, sizeof(buf), "%Y-%m-%d.%X", &tstruct);
+
+    return buf;
+}
+
+#include <fstream>
+
 struct Message{
 	string str;
 	int col;
 };
 
+const char * MESLOGFNAME = "log";
+
 class message_holder{
-	deque<Message> queue;
+		deque<Message> queue;
+		ofstream meslogfile;
 	public:
-	void message(string m);
-	void message(string m, int col);
+		message_holder();
+		~message_holder();
+		void message(string m);
+		void message(string m, int col);
 	private:
-	void drawm();
+		void drawm();
 } mes;
+
+message_holder::message_holder()
+{
+	meslogfile.open(MESLOGFNAME, ios::out | ios::app); 
+	meslogfile << endl;
+	meslogfile << "-----------------" << endl;
+	meslogfile << "* New session" << endl;
+	meslogfile << currentDateTime() << endl;
+}
+
+message_holder::~message_holder()
+{
+	meslogfile.close();
+}
 
 void message_holder::drawm()
 {
@@ -198,6 +233,8 @@ void message_holder::message(string m, int col)
 	if (queue.size() > 8)
 		queue.pop_front();
 	drawm();
+	
+	meslogfile << "[" << col << "]\t" << m << endl;
 }
 
 void message_holder::message(string m)
@@ -416,11 +453,13 @@ void GUI::runGUI()
 				exitall=false;
 				break;
 			case 'r':
+				message("#################");
+				message("BOARD RESET");
 				s.setup();
 				hata.clear();
 				hheur.clear();
 				drawback();display(&s,flipcolor);
-				mes.message("Board reset.");
+				//mes.message("Board reset.");
 				break;
 			case 'g':
 				move(4,40);
@@ -501,9 +540,15 @@ void GUI::runGUI()
 				flipcolor = not flipcolor;
 				break;
 			case 'k':
+				message("#################");
+				message("NEW CPU-CPU MATCH");
+				message(genrep(whitegenome)+" vs "+genrep(blackgenome));
+				message("depth "+to_string(depth));
+				message("");
 				while (true)
 				{
 					//message(NToS(s.movestack.size()));
+					
 					drawback();
 					unpack_genome(whitegenome);
 					os = compute(&s,0,depth,M_ROOT | M_GRAPH);
@@ -684,7 +729,7 @@ void GUI::runGUI()
 				break;
 
 			default:
-				message("Invalid command.");	
+				0;//message("Invalid command.");	
 		}
 
 	}

@@ -8,7 +8,7 @@ TARGET := bin/drafts
 INC := -I include 
 #-I /usr/include
 
-SDLLIB := -lSDL2 -lSDL_image -lpng12 -ljpeg
+SDLLIB := -lSDL2 -lSDL2_image -lpng12 -ljpeg
 LIB := -lncurses -lboost_program_options $(SDLLIB)
 
 all: drafts

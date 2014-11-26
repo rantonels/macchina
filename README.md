@@ -6,7 +6,7 @@ Compilazione
 controllare di avere le dipendenze:
 
 ```bash
-    sudo apt-get install libncurses5-dev libboost-program-options-dev
+    sudo apt-get install libncurses5-dev libboost-program-options-dev libsdl2-dev libsdl2-image-dev
 ```
 
 e poi fare cd nel repositorio ed eseguire
@@ -24,7 +24,7 @@ eseguendo
     ./drafts 
 ```
 
-in linea di comando, senza opzioni, si passa subito all'interfaccia.
+in linea di comando, senza opzioni, si passa subito all'interfaccia. Si hanno contemporaneamente due finestre, una è una GUI ncurses sul terminale, e la seconda è un display grafico più grande dello stato della plancia. Si interagisce col programma mediante l'interfaccia su terminale.
 
 ```
         3           0      d4-b6        Depth: 5
@@ -45,6 +45,8 @@ in linea di comando, senza opzioni, si passa subito all'interfaccia.
  b6-c5
  c3-d4
 ```
+
+### L'interfaccia nel terminale
 
 Lo stato di gioco attuale è mostrato graficamente, sotto il numero di semimosse totali. Nelle due colonne immediatamente a destra ci sono le possibili mosse con i relativi punteggi assegnati quando viene chiamato l'algoritmo (i punteggi non hanno un'interpretazione immediata per un essere umano). Ancora più a destra sono mostrate:
 

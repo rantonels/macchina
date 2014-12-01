@@ -301,6 +301,9 @@ void State::drawascii() {
 
 void State::apply_move(Move m)
 {
+	if(m[0] == NO_MOVES)
+		return;
+
 	turn++;
 	if(draw and m[0] == ACCEPT_DRAW)
 		return;
@@ -691,7 +694,8 @@ vector<Move> State::raw_movelist()
 		outlist.push_back(Move(1,ACCEPT_DRAW));
 	}
 
-
+	if(outlist.size()==0)
+		outlist.push_back(Move(1,NO_MOVES));
 
 	return outlist;
 }

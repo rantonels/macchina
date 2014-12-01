@@ -4,7 +4,7 @@
 #include <zlib.h>
 #include <png.h>
 
-const int TSZ = 64;
+const int TSZ = 128;
 
 SDL_Window* mainwin = NULL;
 
@@ -30,7 +30,12 @@ void startupWindow()
 
 	cout << "- creating window..." << endl;
 
-	mainwin = SDL_CreateWindow( "La Macchina", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 512, 512, SDL_WINDOW_SHOWN);
+	mainwin = SDL_CreateWindow(	"La Macchina", 
+								SDL_WINDOWPOS_UNDEFINED,
+								SDL_WINDOWPOS_UNDEFINED,
+								TSZ*8,
+								TSZ*8,
+								SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
 	
 	screenSurface = SDL_GetWindowSurface( mainwin );
 	
@@ -56,17 +61,25 @@ void startupWindow()
 		exit(1);
 	}
 	
-	surf_spritesheet = SDL_ConvertSurface(  loads, screenSurface->format, 0);
-	if (surf_spritesheet == NULL)
-	{
-		cout << "ERROR OPTIMIZING img/spritesheet.png" << endl;
-		exit(1);
-	}
 	
-	Uint32 colorkey = SDL_MapRGB( surf_spritesheet->format, 0, 0xFF, 0xFF );
-	SDL_SetColorKey( surf_spritesheet, SDL_TRUE, colorkey );
 	
-	SDL_FreeSurface(loads);
+	//surf_spritesheet = SDL_ConvertSurface(  loads, screenSurface->format, 0);
+	//if (surf_spritesheet == NULL)
+	//{
+		//cout << "ERROR OPTIMIZING img/spritesheet.png" << endl;
+		//exit(1);
+	//}
+	
+	surf_spritesheet = loads;
+	//SDL_FreeSurface(loads);
+	
+	SDL_SetSurfaceBlendMode(screenSurface, SDL_BLENDMODE_BLEND); 
+	SDL_SetSurfaceBlendMode(surf_spritesheet, SDL_BLENDMODE_BLEND); 
+	
+	//Uint32 colorkey = SDL_MapRGB( surf_spritesheet->format, 0, 0xFF, 0xFF );
+	//SDL_SetColorKey( surf_spritesheet, SDL_TRUE, colorkey );
+	
+
 	
 	// prepara rettangoli di sprite clipping
 	

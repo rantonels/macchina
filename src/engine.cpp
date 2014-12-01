@@ -192,7 +192,7 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode, flo
 	//cout << "moveset generated" << endl;
 
 	//se non ci sono mosse
-	if (ls.size() == 0) //movearray vuoto vuol dire o perdita o stallo
+	if ((ls.size() == 0) or (ls.back()[0] == NO_MOVES)) //movearray vuoto vuol dire o perdita o stallo
 	{
 		strategy s;
 		s.value = original->value_function();
@@ -255,7 +255,8 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode, flo
 		refresh();
 	};
 
-
+	State tmp; //l'allocazione dello stato temporaneo e' spostata fuori dal loop. 1 ordine di allocazioni in meno!
+	
 	for(int i=0; i<ls.size(); i++)
 	{
 		//	cout << "branch " << i << ": ";
@@ -270,7 +271,7 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode, flo
 		}
 		else
 		{
-			State tmp;
+			
 			//copy original->tmp
 			tmp.copyfrom(original);
 

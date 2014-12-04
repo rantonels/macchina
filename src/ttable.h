@@ -15,7 +15,8 @@ struct htentry {
 
 class Htable {
 	public:
-		Htable();		
+		Htable();	
+			
 		//[posizione][tipopedina]
 		uint32_t rnums[32][16];
 		void init_rng();
@@ -25,6 +26,8 @@ class Htable {
 
 		htentry table[TTBSIZE];	
 		void clear();		
+	private:
+		std::hash<uint32_t> hasher;
 
 };
 

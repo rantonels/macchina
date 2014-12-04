@@ -59,13 +59,18 @@ int State::value_function()
 {
 	if(turn >= 100) //fine tempo
 	{
-		int wsum = 0;
-		int bsum = 0;
-		for (int i=0; i<32; i++)
-		{
-			wsum += (data[i]==WHITE)+2*(data[i]==WQUEEN);
-			bsum += (data[i]==BLACK)+2*(data[i]==BQUEEN);
-		}
+		
+		//int wsum = 0;
+		//int bsum = 0;
+		//for (int i=0; i<32; i++)
+		//{
+			//wsum += (data[i]==WHITE)+2*(data[i]==WQUEEN);
+			//bsum += (data[i]==BLACK)+2*(data[i]==BQUEEN);
+		//}
+		
+		int wsum = bboardSum(data.PMASK & (~data.BMASK)) + bboardSum(data.PMASK & data.KMASK & (~data.BMASK));
+		int bsum = bboardSum(data.PMASK & (data.BMASK)) + bboardSum(data.PMASK & data.KMASK & (data.BMASK));
+		
 		if (wsum>bsum)
 			return INFTIME;
 		else
@@ -77,21 +82,38 @@ int State::value_function()
 	}
 
 	int val = 0;
-	int b=0;
-	int n=0;
+	//int b=0;
+	//int n=0;
+	//int tmp;
+	//for (int i=0; i<32; i++)
+	//{
+		//Cell d = data[i];
+		////conteggio bianchi
+		//tmp = (PIECEVAL+FROWVAL*((i/4)==7))*(d == WHITE) + QUEENVAL*(d == WQUEEN);
+		//b += 10*tmp + CENTERVAL*center(i%4)*(tmp/10); //moltiplica per 1.1
+
+		////conteggio neri
+		//tmp = (PIECEVAL+FROWVAL*((i/4)==0))*(d == BLACK) + QUEENVAL*(d == BQUEEN);
+		//n += 10*tmp + CENTERVAL*center(i%4)*(tmp/10); //moltiplica per 1.1
+	//}	
+
+	uint32_t WM = data.PMASK & (~data.BMASK) & (~data.KMASK);	//uomini bianchi non dame
+	uint32_t WK = data.PMASK & (~data.BMASK) & (data.KMASK);	//dame bianche
+	uint32_t BM = data.PMASK &  (data.BMASK) & (~data.KMASK);	//uomini neri non dame
+	uint32_t BK = data.PMASK & (data.BMASK) & (data.KMASK);		//dame nere
+	
 	int tmp;
-	for (int i=0; i<32; i++)
-	{
-		Cell d = data[i];
-		//conteggio bianchi
-		tmp = (PIECEVAL+FROWVAL*((i/4)==7))*(d == WHITE) + QUEENVAL*(d == WQUEEN);
-		b += 10*tmp + CENTERVAL*center(i%4)*(tmp/10); //moltiplica per 1.1
-
-		//conteggio neri
-		tmp = (PIECEVAL+FROWVAL*((i/4)==0))*(d == BLACK) + QUEENVAL*(d == BQUEEN);
-		n += 10*tmp + CENTERVAL*center(i%4)*(tmp/10); //moltiplica per 1.1
-	}	
-
+	
+	tmp = PIECEVAL*bboardSum(WM) + (FROWVAL - PIECEVAL)*bboardSum(WM & 0xF0000000); //maschera per l'ultima riga
+	tmp += QUEENVAL * bboardSum(WK);
+	int b = tmp;
+	
+	
+	tmp = PIECEVAL*bboardSum(BM) + (FROWVAL - PIECEVAL)*bboardSum(BM & 0x0000000F); //maschera per la prima riga
+	tmp += QUEENVAL * bboardSum(BK);
+	int n = tmp;
+	
+	
 	//-infinito se non ci sono piu' bianchi
 	if (b == 0)
 		return -INFTY; 
@@ -145,17 +167,19 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode, flo
 
 
 		//cerca nel database
-		strategy res = database.query(original);
-		if(not (res.optimal[0] == NOT_DATABASE))
+		if(original->turn <=2)
 		{
-			if ((mode & M_GRAPH)==M_GRAPH)
+			strategy res = database.query(original);
+			if(not (res.optimal[0] == NOT_DATABASE))
 			{
-				move(1,20);
-				addstr(("Found in DB. ("+valrep(res.value)+")").c_str());
+				if ((mode & M_GRAPH)==M_GRAPH)
+				{
+					move(1,20);
+					addstr(("Found in DB. ("+valrep(res.value)+")").c_str());
+				}
+				return res;
 			}
-			return res;
 		}
-
 
 		//pulizia auto HT
 		if (hata.accesscounter >= (TTBSIZE>>2))
@@ -293,7 +317,7 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode, flo
 				//cout << "LOL" << endl;
 				//cout << moverep(ls[i]) << endl;
 				//exit(0);
-				hheur.value[ls[i].front()][ls[i].back()] += (0x000001 << (depth));
+				hheur.value[ls[i].front()][ls[i].back()] +=  (0x00008000 >> (depth));
 				break;
 			}
 		}

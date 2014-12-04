@@ -6,6 +6,7 @@
 #include <climits>
 #include <iostream>
 #include <sstream>
+#include "utils.h"
 
 using namespace std;
 
@@ -87,11 +88,38 @@ Move flipmove(Move m);
 
 char cellascii(Cell c);
 
+unsigned char bboardGetbit(uint32_t bb,int i);
+void setbit(uint32_t * bp, bool bit, int i);
+
+int bboardSum(uint32_t bb);
+
+uint32_t bboardFlip(uint32_t bb);
+
+uint32_t ROT1(uint32_t B);
+uint32_t ROT2(uint32_t B);
+
+uint32_t ANTIROT1(uint32_t B);
+uint32_t ANTIROT2(uint32_t B);
+
+
+class Bitboard {
+	public:
+		uint32_t PMASK;
+		uint32_t BMASK;
+		uint32_t KMASK;
+		
+		Cell operator[](int i);
+		void setCell(int i,Cell val); 
+
+		uint32_t jumpers();
+};
+
 class State {
 	public:
 		State();
-		Cell data[32];
-		vector<Move> movestack;
+		Bitboard data;
+		void setCell(int i,Cell val); 
+		//vector<Move> movestack;
 		bool draw;
 		char turn;
 

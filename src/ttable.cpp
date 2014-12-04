@@ -2,7 +2,6 @@
 #include "ttable.h"
 
 
-
 Htable hata;
 
 Htable::Htable()
@@ -29,17 +28,25 @@ void Htable::init_rng()
 	}
 }
 
+//uint32_t Htable::hash(State * sp)
+//{
+	//uint32_t h = 0;
+
+	//for (int i=0; i<32; i++)
+	//{
+		//h = h xor (rnums[i][ sp->data[i] ]);
+	//}
+
+	//h = h xor (rnums[7][ (sp->turn)%16]);
+	//h = h xor (rnums[9][ 7*(sp->draw)]);
+
+	//return h;
+//}
+
 uint32_t Htable::hash(State * sp)
 {
-	uint32_t h = 0;
-
-	for (int i=0; i<32; i++)
-	{
-		h = h xor (rnums[i][ sp->data[i] ]);
-	}
-
-	h = h xor (rnums[7][ (sp->turn)%16]);
-	h = h xor (rnums[9][ 7*(sp->draw)]);
-
-	return h;
+		uint32_t ph = hasher(sp->data.PMASK);
+		uint32_t bh = hasher((sp->data.PMASK)&(sp->data.BMASK));
+		uint32_t kh = hasher((sp->data.PMASK)&(sp->data.KMASK) );
+	return ph ^ bh ^ kh;
 }

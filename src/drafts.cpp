@@ -456,8 +456,8 @@ void GUI::runGUI()
 				message("#################");
 				message("BOARD RESET");
 				s.setup();
-				hata.clear();
-				hheur.clear();
+				//hata.clear();
+				//hheur.clear();
 				drawback();display(&s,flipcolor);
 				//mes.message("Board reset.");
 				break;
@@ -632,7 +632,7 @@ void GUI::runGUI()
 						case '2':
 						case '3':
 						case '4':
-							s.data[curpos] = (Cell)(gh-'0');
+							s.setCell(curpos, (Cell)(gh-'0'));
 							chosen = true;
 							break;
 						default:

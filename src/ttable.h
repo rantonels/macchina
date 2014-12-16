@@ -27,7 +27,7 @@ class Htable {
 		htentry table[TTBSIZE];	
 		void clear();		
 	private:
-		std::hash<uint32_t> hasher;
+		uint32_t hash3232(uint32_t x);
 
 };
 

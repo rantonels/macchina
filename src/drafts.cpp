@@ -387,6 +387,21 @@ void display(State * s, bool flip = false)
 //04021799 - little beast
 
 
+const chrono::milliseconds comp_times[] = {
+			chrono::milliseconds(5), 
+			chrono::milliseconds(50), 
+			chrono::milliseconds(100), 
+			chrono::milliseconds(200), 
+			chrono::milliseconds(500) , 
+			chrono::seconds(1), 
+			chrono::seconds(2), 
+			chrono::seconds(5), 
+			chrono::seconds(10), 
+			chrono::seconds(20) 
+					};
+
+const int MAXGUITIME = 10;
+
 void GUI::runGUI()
 {
 	timer tm;
@@ -531,7 +546,7 @@ void GUI::runGUI()
 				refresh();
 				unpack_genome(whitegenome);
 				tm.restart();
-				os = compute(&s,0,depth, M_ROOT | M_GRAPH);
+				os = computetime(comp_times[depth],&s,0, M_ROOT | M_GRAPH);
 				s.apply_move(os.optimal);
 				mes.message(moverep(os.optimal) + elapsedrep(tm.elapsed()),flipcolor);
 				refresh();
@@ -551,7 +566,7 @@ void GUI::runGUI()
 					
 					drawback();
 					unpack_genome(whitegenome);
-					os = compute(&s,0,depth,M_ROOT | M_GRAPH);
+					os = computetime(comp_times[depth],&s,0,M_ROOT | M_GRAPH);
 					s.apply_move(os.optimal);
 					message(moverep(os.optimal));
 					if (s.turn>=100)
@@ -564,7 +579,7 @@ void GUI::runGUI()
 
 					drawback();s.flip();
 					unpack_genome(blackgenome);
-					os = compute(&s,0,depth,M_ROOT | M_GRAPH | M_GRAPHCOLOR);
+					os = computetime(comp_times[depth],&s,0,M_ROOT | M_GRAPH | M_GRAPHCOLOR);
 					s.apply_move(os.optimal);
 					mes.message(moverep(os.optimal),1);
 					s.flip();
@@ -583,18 +598,18 @@ void GUI::runGUI()
 				display(&s,flipcolor);refresh();
 				break;
 			case 's':
-				depth = max(2,depth-1);
-				message("Depth lowered to "+NToS(depth));
+				depth = max(0,depth-1);
+				message("Depth lowered to "+NToS(comp_times[depth].count())+ " ms");
 				break;
 			case 'd':
-				depth = min(MAXGUIDEPTH, depth+1);
-				message("Depth raised to "+NToS(depth));
+				depth = min(MAXGUITIME-1, depth+1);
+				message("Depth raised to "+NToS(comp_times[depth].count()) + " ms");
 				break;
 			case 'y':
 				refresh();
 				s.flip();
 				unpack_genome(blackgenome);
-				os = compute(&s,0,depth,M_ROOT | M_GRAPH | M_GRAPHCOLOR);
+				os = computetime(comp_times[depth], &s,0 ,M_ROOT | M_GRAPH | M_GRAPHCOLOR);
 				s.apply_move(os.optimal);
 				flos = flipmove(os.optimal);
 				tm.restart();

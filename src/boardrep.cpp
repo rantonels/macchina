@@ -1,5 +1,6 @@
 #include "boardrep.h"
 #include "tree.hh"
+#include <strings.h>
 
 
 char NToC(int n)
@@ -176,6 +177,15 @@ uint32_t Bitboard::jumpers()
 };
 
 
+uint32_t Bitboard::steppers()
+{
+	uint32_t WM = PMASK & ~BMASK & ~KMASK;
+	
+	uint32_t whitemansteppers = WM & (ANTIROT1(~PMASK) | ANTIROT2(~PMASK));
+	
+	return whitemansteppers | (PMASK & ~BMASK & KMASK);
+}
+
 //Hamming weight (somma dei bit)
 
 int bboardSum(uint32_t i)
@@ -188,15 +198,15 @@ int bboardSum(uint32_t i)
 
 unsigned char bboardGetbit(uint32_t bb,int i)
 {
-	return (bb >> i) & 0x01;
+	return (bb >> i) & 0x00000001;
 }
 
 
 Cell Bitboard::operator[](int i)
 {
 	unsigned char ispiece	= bboardGetbit(PMASK,i);
-	unsigned char isblack	= bboardGetbit(BMASK,i);
-	unsigned char isking	= bboardGetbit(KMASK,i);
+	unsigned char isblack	= bboardGetbit(BMASK & PMASK,i);
+	unsigned char isking	= bboardGetbit(KMASK & PMASK,i);
 	
 	return ispiece*(1 + isblack + 2*isking);
 }
@@ -366,13 +376,14 @@ void State::random()
 
 void State::copyfrom(State* s)
 {
-	for(int i=0;i<32;i++)
-	{
+	//for(int i=0;i<32;i++)
+	//{
 		//data[i] = s->data[i];
-		data.PMASK = s->data.PMASK;
-		data.BMASK = s->data.BMASK;
-		data.KMASK = s->data.KMASK;
-	}
+		
+	//}
+	data.PMASK = s->data.PMASK;
+	data.BMASK = s->data.BMASK;
+	data.KMASK = s->data.KMASK;
 	//movestack = s->movestack;
 	draw = s->draw;
 	turn = s->turn;
@@ -599,7 +610,7 @@ vector<Move> State::raw_movelist()
 	if(JMASK != 0x00000000)
 	{
 		//generazione salti
-		for (int i=0;i<32;i++)
+		for (int i=ffs(JMASK)-1;i<32;i++)
 		{
 			if (bboardGetbit(JMASK,i)) //if (data[i] & 0x01)  //((data[i] == WHITE) or (data[i] == WQUEEN))
 			{
@@ -778,13 +789,16 @@ vector<Move> State::raw_movelist()
 
 	//generazione lista mosse normali
 	int counter = 0;
-	for (int i=0;i<32;i++)
+	
+	uint32_t MMASK = data.steppers();
+	if (MMASK != 0)
 	{
-		if(bboardGetbit(data.PMASK,i))
+	for (int i=ffs(MMASK)-1;i<32;i++)
+	{
+		if(bboardGetbit(MMASK,i))
 		{
 			counter = 0;
-			if(not bboardGetbit(data.BMASK,i))
-			{
+			
 				if(not bboardGetbit(data.KMASK,i))
 				{
 					for(int k=0;k<2;k++)
@@ -820,10 +834,11 @@ vector<Move> State::raw_movelist()
 						}
 					}
 				}
-			}
+			
 
 		}
-	};
+	}
+	}
 
 
 	if(draw)

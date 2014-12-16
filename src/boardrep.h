@@ -66,6 +66,7 @@ const char PROPOSE_DRAW = 34;
 const char ACCEPT_DRAW = 35;
 const char NOT_DATABASE = 36;
 const char ENDMOVE_CARRIAGE = 37;
+const char NULLMOVE = 38;
 
 
 //infinito
@@ -112,6 +113,7 @@ class Bitboard {
 		void setCell(int i,Cell val); 
 
 		uint32_t jumpers();
+		uint32_t steppers();
 };
 
 class State {

@@ -9,7 +9,7 @@ INC := -I include
 #-I /usr/include
 
 SDLLIB := -lSDL2 -lSDL2_image -lpng12 
-LIB := -lncurses -lboost_program_options $(SDLLIB)
+LIB := -pthread -lncurses -lboost_program_options $(SDLLIB)
 
 OLIST := $(BUILDDIR)/boardrep.o $(BUILDDIR)/hheuristic.o $(BUILDDIR)/database.o $(BUILDDIR)/ttable.o $(BUILDDIR)/utils.o $(BUILDDIR)/engine.o $(BUILDDIR)/graphics.o
 

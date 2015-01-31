@@ -59,13 +59,18 @@ int State::value_function()
 {
 	if(turn >= 100) //fine tempo
 	{
-		int wsum = 0;
-		int bsum = 0;
-		for (int i=0; i<32; i++)
-		{
-			wsum += (data[i]==WHITE)+2*(data[i]==WQUEEN);
-			bsum += (data[i]==BLACK)+2*(data[i]==BQUEEN);
-		}
+		
+		//int wsum = 0;
+		//int bsum = 0;
+		//for (int i=0; i<32; i++)
+		//{
+			//wsum += (data[i]==WHITE)+2*(data[i]==WQUEEN);
+			//bsum += (data[i]==BLACK)+2*(data[i]==BQUEEN);
+		//}
+		
+		int wsum = bboardSum(data.PMASK & (~data.BMASK)) + bboardSum(data.PMASK & data.KMASK & (~data.BMASK));
+		int bsum = bboardSum(data.PMASK & (data.BMASK)) + bboardSum(data.PMASK & data.KMASK & (data.BMASK));
+		
 		if (wsum>bsum)
 			return INFTIME;
 		else
@@ -77,21 +82,38 @@ int State::value_function()
 	}
 
 	int val = 0;
-	int b=0;
-	int n=0;
+	//int b=0;
+	//int n=0;
+	//int tmp;
+	//for (int i=0; i<32; i++)
+	//{
+		//Cell d = data[i];
+		////conteggio bianchi
+		//tmp = (PIECEVAL+FROWVAL*((i/4)==7))*(d == WHITE) + QUEENVAL*(d == WQUEEN);
+		//b += 10*tmp + CENTERVAL*center(i%4)*(tmp/10); //moltiplica per 1.1
+
+		////conteggio neri
+		//tmp = (PIECEVAL+FROWVAL*((i/4)==0))*(d == BLACK) + QUEENVAL*(d == BQUEEN);
+		//n += 10*tmp + CENTERVAL*center(i%4)*(tmp/10); //moltiplica per 1.1
+	//}	
+
+	uint32_t WM = data.PMASK & (~data.BMASK) & (~data.KMASK);	//uomini bianchi non dame
+	uint32_t WK = data.PMASK & (~data.BMASK) & (data.KMASK);	//dame bianche
+	uint32_t BM = data.PMASK &  (data.BMASK) & (~data.KMASK);	//uomini neri non dame
+	uint32_t BK = data.PMASK & (data.BMASK) & (data.KMASK);		//dame nere
+	
 	int tmp;
-	for (int i=0; i<32; i++)
-	{
-		Cell d = data[i];
-		//conteggio bianchi
-		tmp = (PIECEVAL+FROWVAL*((i/4)==7))*(d == WHITE) + QUEENVAL*(d == WQUEEN);
-		b += 10*tmp + CENTERVAL*center(i%4)*(tmp/10); //moltiplica per 1.1
-
-		//conteggio neri
-		tmp = (PIECEVAL+FROWVAL*((i/4)==0))*(d == BLACK) + QUEENVAL*(d == BQUEEN);
-		n += 10*tmp + CENTERVAL*center(i%4)*(tmp/10); //moltiplica per 1.1
-	}	
-
+	
+	tmp = PIECEVAL*bboardSum(WM) + (FROWVAL - PIECEVAL)*bboardSum(WM & 0xF0000000); //maschera per l'ultima riga
+	tmp += QUEENVAL * bboardSum(WK);
+	int b = tmp;
+	
+	
+	tmp = PIECEVAL*bboardSum(BM) + (FROWVAL - PIECEVAL)*bboardSum(BM & 0x0000000F); //maschera per la prima riga
+	tmp += QUEENVAL * bboardSum(BK);
+	int n = tmp;
+	
+	
 	//-infinito se non ci sono piu' bianchi
 	if (b == 0)
 		return -INFTY; 
@@ -119,8 +141,11 @@ int State::value_function()
 
 //la funzione ritorna il punteggio stimato sempre per il giocatore turn!
 
-strategy compute( State *original, bool turn, int depth, unsigned char mode, float alphabetalim)
+strategy compute( State *original, bool turn, int depth, unsigned char mode, float alphabetalim, int * handle)
 {
+	//if ((mode & M_ROOT) == M_ROOT)
+	//	cout << "running analysis on state " << original->data.PMASK << " at depth " << depth << endl;
+	
 	//cout << "depth: " << depth << endl;
 	//la board e' flippata da dopo l'ingresso a dopo la generazione delle mosse
 	if (turn==1) //turn == 0 bianco; turn == 1 nero
@@ -142,20 +167,24 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode, flo
 
 	if((mode & M_ROOT)==M_ROOT)
 	{
+		if (handle != NULL)
+			(*handle) = HC_NORMAL;
 
 
 		//cerca nel database
-		strategy res = database.query(original);
-		if(not (res.optimal[0] == NOT_DATABASE))
+		if(original->turn <=2)
 		{
-			if ((mode & M_GRAPH)==M_GRAPH)
+			strategy res = database.query(original);
+			if(not (res.optimal[0] == NOT_DATABASE))
 			{
-				move(1,20);
-				addstr(("Found in DB. ("+valrep(res.value)+")").c_str());
+				if ((mode & M_GRAPH)==M_GRAPH)
+				{
+					move(1,20);
+					addstr(("Found in DB. ("+valrep(res.value)+")").c_str());
+				}
+				return res;
 			}
-			return res;
 		}
-
 
 		//pulizia auto HT
 		if (hata.accesscounter >= (TTBSIZE>>2))
@@ -185,6 +214,15 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode, flo
 
 	}
 
+
+	//interrompi se ricevuto messaggio di kill //CHECKPOINT 1
+	if ((handle != NULL) and ((*handle) == HC_ABORT))
+	{
+			strategy ab_str;
+			ab_str.optimal = Move(1,NULLMOVE);
+			ab_str.value = -INFTY;
+			return ab_str;
+	}
 
 	//generazione movestack
 	vector<Move> ls = original->raw_movelist();
@@ -259,6 +297,15 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode, flo
 	
 	for(int i=0; i<ls.size(); i++)
 	{
+		//interrompi se ricevuto messaggio di kill //CHECKPOINT 2
+		if ((handle != NULL) and ((*handle) == HC_ABORT))
+		{
+			strategy ab_str;
+			ab_str.optimal = Move(1,NULLMOVE);
+			ab_str.value = -INFTY;
+			return ab_str;
+		}
+		
 		//	cout << "branch " << i << ": ";
 		//	printmove(ls[i]);
 		if(ls[i][0] == ACCEPT_DRAW)
@@ -280,7 +327,7 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode, flo
 				tmp.flip();
 
 
-			strategy strat = compute(&tmp, not turn, depth-1, 0 ,-abcounter);
+			strategy strat = compute(&tmp, not turn, depth-1, 0 ,-abcounter, handle);
 			points[i] = strat.value;
 
 			//update contatore di alfa-beta
@@ -293,7 +340,7 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode, flo
 				//cout << "LOL" << endl;
 				//cout << moverep(ls[i]) << endl;
 				//exit(0);
-				hheur.value[ls[i].front()][ls[i].back()] += (0x000001 << (depth));
+				hheur.value[ls[i].front()][ls[i].back()] +=  (0x00008000 >> (depth));
 				break;
 			}
 		}
@@ -379,11 +426,14 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode, flo
 	int hix = h%TTBSIZE;
 	if( (not(hata.table[hix].active)) or (hata.table[hix].depth < depth) )
 	{
+	//	cout << "salvataggio nell'ht. depth attuale: "<< depth << " contro " << (int)(hata.table[hix].depth) << endl;
 		hata.table[hix].active = true;
 		hata.table[hix].optimal = out;
 		hata.table[hix].depth = depth;
 		hata.table[hix].hash = h;
 	};
+	
+	//if((mode & M_ROOT) == M_ROOT) cout << "move is ready for return from depth " << depth << endl;
 
 	return out;
 };
@@ -418,3 +468,68 @@ strategy compute( State *original, bool turn, int depth, unsigned char mode, flo
 		//auto status = future.wait_for
 	//}
 //}
+
+
+#include <future>
+#include <thread>
+
+strategy computetime(chrono::milliseconds seconds, State * original, bool turn, unsigned char mode)
+{
+	chrono::time_point<std::chrono::system_clock> start, actual;
+    start = std::chrono::system_clock::now();
+    actual = std::chrono::system_clock::now();
+    
+    vector<future<strategy>> futvec;
+    vector<int> handles;
+    futvec.reserve(15);
+    handles.reserve(15);
+    
+    strategy out;
+    
+    int depth=5;
+    
+    //cout << "DEPTH " << depth << endl;
+    futvec.push_back( async (std::launch::async , compute, original, turn, depth, mode, -INFTY, (int*)NULL) );
+	
+
+	while((depth<500) and (actual-start < seconds))
+	{
+		auto status = futvec.back().wait_for(chrono::milliseconds(0));
+		
+		//if (status == std::future_status::deferred) {
+            //std::cout << "deferred\n";
+        //} else if (status == std::future_status::timeout) {
+            //std::cout << "timeout\n";
+        //} else if (status == std::future_status::ready) {
+            //std::cout << "ready!\n";
+        //}
+		
+		//if (status == future_status::timeout)
+			//cout<< "timeout..." << futvec.size() << endl;
+
+		if(status == future_status::ready)
+		{
+			out = futvec.back().get();
+			//cout << "previous thread is ready. Solution was: " << moverep(out.optimal) << endl;
+			depth++;
+			//cout << "DEPTH " << depth << endl;
+			hata.clear();
+			handles.push_back(HC_NORMAL);
+			futvec.push_back( async (std::launch::async, compute, original, turn, depth, mode, -INFTY, &(handles.back()) ));
+		}
+		
+		this_thread::sleep_for(chrono::milliseconds(1));
+		
+		
+		actual = chrono::system_clock::now();
+		
+	};
+	
+	//cout << "sending " << handles.size() << " kill signals..." << endl;
+	for(int i=0; i<handles.size(); i++)
+		handles[i] = HC_ABORT;
+	
+	//cout << "we should be done" << endl;
+	
+	return out;
+}

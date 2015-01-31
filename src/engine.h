@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <stdint.h>
 #include <ncurses.h>
+#include <chrono>
 
 
 const int PIECEVAL = 10;
@@ -38,9 +39,13 @@ string valrep(float val);
 int center(int c);
 
 
+static unsigned int HC_NORMAL = 0;
+static unsigned int HC_ABORT = 1;
 
 
-strategy compute( State *original, bool turn, int depth, unsigned char mode=M_ROOT, float alphabetalim=-INFTY);
 
+strategy compute( State *original, bool turn, int depth, unsigned char mode=M_ROOT, float alphabetalim=-INFTY, int * handle = NULL);
+
+strategy computetime(chrono::milliseconds seconds, State * original, bool turn, unsigned char mode=M_ROOT);
 
 #endif

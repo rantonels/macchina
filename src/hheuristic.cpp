@@ -18,12 +18,12 @@ Hheur::Hheur()
 	clear();
 }
 
-uint32_t evalhheur (Move m) 
+uint32_t evalhheur (const Move * m) 
 { 
-	return hheur.value[m.front()][m.back()]; 
+	return hheur.value[m->front()][m->back()]; 
 }
 
-bool sorthheur(Move i, Move j) 
+bool sorthheur(const Move i, const Move j) 
 { 
-	return (evalhheur(i)>evalhheur(j)); 
+	return (evalhheur(&i)>evalhheur(&j)); 
 }

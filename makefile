@@ -9,7 +9,9 @@ INC := -I include
 #-I /usr/include
 
 SDLLIB := -lSDL2 -lSDL2_image -lpng12 
-LIB := -lncurses -lboost_program_options $(SDLLIB)
+LIB := -pthread -lncurses -lboost_program_options $(SDLLIB)
+
+OLIST := $(BUILDDIR)/boardrep.o $(BUILDDIR)/hheuristic.o $(BUILDDIR)/database.o $(BUILDDIR)/ttable.o $(BUILDDIR)/utils.o $(BUILDDIR)/engine.o $(BUILDDIR)/graphics.o
 
 all: drafts
 
@@ -51,14 +53,26 @@ $(BUILDDIR)/drafts.o : $(SRC)/drafts.cpp $(SRC)/boardrep.h $(SRC)/hheuristic.h $
 
 #linking
 
-$(TARGET): $(BUILDDIR)/drafts.o $(BUILDDIR)/boardrep.o $(BUILDDIR)/hheuristic.o $(BUILDDIR)/database.o $(BUILDDIR)/ttable.o $(BUILDDIR)/utils.o $(BUILDDIR)/engine.o $(BUILDDIR)/graphics.o
-	$(CC) $(CFLAGS) $(BUILDDIR)/drafts.o $(BUILDDIR)/boardrep.o $(BUILDDIR)/hheuristic.o $(BUILDDIR)/database.o $(BUILDDIR)/ttable.o $(BUILDDIR)/utils.o $(BUILDDIR)/engine.o $(BUILDDIR)/graphics.o -o $(TARGET) $(INC) $(LIB)
+$(TARGET): $(BUILDDIR)/drafts.o $(OLIST)
+	$(CC) $(CFLAGS) $(BUILDDIR)/drafts.o $(OLIST) -o $(TARGET) $(INC) $(LIB)
+	$(CC) -pg $(CFLAGS) $(BUILDDIR)/drafts.o $(OLIST) -o $(TARGET)_profiling $(INC) $(LIB)
+
 
 drafts : $(TARGET)
 	cp $(TARGET) drafts
+	cp $(TARGET)_profiling drafts_profiling
 
-#profile: $(SRC)/drafts.cpp
-#	$(CC) -pg -std=c++11 -O3 $(SRC)/drafts.cpp -o $(TARGET)_profiling $(INC) $(LIB)
+
+#test
+
+$(BUILDDIR)/test.o: $(SRC)/test.cpp $(SRC)/boardrep.h $(SRC)/engine.h
+	$(CC) $(CFLAGS) -c $(SRC)/test.cpp -o $(BUILDDIR)/test.o
+	
+bin/test : $(BUILDDIR)/test.o $(BUILDDIR)/boardrep.o $(BUILDDIR)/utils.o $(BUILDDIR)/engine.o $(BUILDDIR)/hheuristic.o $(BUILDDIR)/database.o $(BUILDDIR)/ttable.o
+	$(CC) $(CFLAGS) $(BUILDDIR)/test.o $(BUILDDIR)/boardrep.o $(BUILDDIR)/utils.o $(BUILDDIR)/engine.o $(BUILDDIR)/hheuristic.o $(BUILDDIR)/database.o $(BUILDDIR)/ttable.o -o bin/test $(INC) $(LIB)
+
+test : bin/test
+	cp bin/test test
 
 clean:
-	rm -f drafts bin/* $(BUILDDIR)/*
+	rm -f drafts test bin/* $(BUILDDIR)/*
